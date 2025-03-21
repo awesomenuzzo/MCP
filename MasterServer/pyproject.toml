@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "mcp-server-manager"
+version = "0.1.0"
+description = "A GUI application to manage MCP servers for Claude and Cursor"
+authors = ["Your Name <your.email@example.com>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.8"
+PyQt6 = "^6.4.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api" 

@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "pizza-api"
+version = "0.1.0"
+description = "Pizza ordering API using MCP"
+authors = ["Your Name <your.email@example.com>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+httpx = "^0.28.1"
+mcp = {extras = ["cli"], version = "^1.4.1"}
+requests = "^2.31.0"
+pizzapi = {git = "https://github.com/gamagori/pizzapi.git", rev = "master"}
+
+[tool.poetry.group.test.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.23.5"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["."]
+python_files = ["test_*.py"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api" 

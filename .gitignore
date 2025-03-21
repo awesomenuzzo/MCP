@@ -1,0 +1,45 @@
+# Python-generated files
+**/__pycache__/
+**/build/
+**/dist/
+**/wheels/
+**/*.egg-info/
+**/*.py[cod]
+**/*$py.class
+**/*.so
+**/.Python
+
+# Virtual environments
+**/.venv/
+**/.env
+**/env/
+**/venv/
+**/ENV/
+
+# Poetry
+**/poetry.lock
+**/.poetry/
+
+# IDE
+**/.idea/
+**/.vscode/
+**/*.swp
+**/*.swo
+
+# Testing
+**/.coverage
+**/htmlcov/
+**/.pytest_cache/
+**/logs/
+**/*.log
+
+# Qt-specific
+**/*.qmlc
+**/*.jsc
+**/*.qrc
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.so
+**/*.dylib
+**/*.dll
