@@ -1,5 +1,5 @@
 {
-    "weather": {
+    "NWS Weather": {
         "command": "uv",
         "args": [
             "--directory",
