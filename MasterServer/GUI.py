@@ -316,6 +316,17 @@ class MCPServerManager(QMainWindow):
                         self.enabled_servers.update(config["mcpServers"].keys())
             except:
                 pass
+                
+        # Check Windsurf config
+        windsurf_config_path = os.path.expanduser("~/.codeium/windsurf/mcp_config.json")
+        if os.path.exists(windsurf_config_path):
+            try:
+                with open(windsurf_config_path, 'r') as f:
+                    config = json.load(f)
+                    if "mcpServers" in config:
+                        self.enabled_servers.update(config["mcpServers"].keys())
+            except:
+                pass
     
     def populate_server_grid(self):
         # Add cards in a single column
@@ -360,13 +371,26 @@ class MCPServerManager(QMainWindow):
                 except:
                     pass
             
+            # Handle Windsurf config
+            windsurf_config_path = os.path.expanduser("~/.codeium/windsurf/mcp_config.json")
+            if os.path.exists(windsurf_config_path):
+                try:
+                    with open(windsurf_config_path, 'r') as f:
+                        config = json.load(f)
+                        if "mcpServers" in config and server_name in config["mcpServers"]:
+                            del config["mcpServers"][server_name]
+                            with open(windsurf_config_path, 'w') as f:
+                                json.dump(config, f, indent=2)
+                except:
+                    pass
+            
             # Update UI
             self.enabled_servers.discard(server_name)
             self.refresh_server_states()
             
             QMessageBox.information(self, "Success", 
                                   f"Server '{server_name}' has been disabled!\n"
-                                  "Please restart Claude and Cursor for changes to take effect.")
+                                  "Please restart Claude, Cursor, and Windsurf for changes to take effect.")
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to disable server: {str(e)}")
@@ -423,6 +447,30 @@ class MCPServerManager(QMainWindow):
             # Save updated Cursor config
             with open(cursor_config_path, 'w') as f:
                 json.dump(existing_cursor_config, f, indent=2)
+                
+            # Handle Windsurf config
+            windsurf_config_path = os.path.expanduser("~/.codeium/windsurf/mcp_config.json")
+            os.makedirs(os.path.dirname(windsurf_config_path), exist_ok=True)
+            
+            # Load existing Windsurf config or create new one
+            windsurf_config = {}
+            if os.path.exists(windsurf_config_path):
+                try:
+                    with open(windsurf_config_path, 'r') as f:
+                        windsurf_config = json.load(f)
+                except json.JSONDecodeError:
+                    pass
+            
+            # Initialize mcpServers if it doesn't exist
+            if "mcpServers" not in windsurf_config:
+                windsurf_config["mcpServers"] = {}
+            
+            # Update the specific server config
+            windsurf_config["mcpServers"][server_name] = server_config
+            
+            # Save updated Windsurf config
+            with open(windsurf_config_path, 'w') as f:
+                json.dump(windsurf_config, f, indent=2)
             
             # Update UI
             self.enabled_servers.add(server_name)
@@ -430,7 +478,7 @@ class MCPServerManager(QMainWindow):
                 
             QMessageBox.information(self, "Success", 
                                   f"Server '{server_name}' has been enabled!\n"
-                                  "Please restart Claude and Cursor for changes to take effect.")
+                                  "Please restart Claude, Cursor, and Windsurf for changes to take effect.")
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save configuration: {str(e)}")
