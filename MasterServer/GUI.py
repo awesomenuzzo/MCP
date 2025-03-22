@@ -768,6 +768,16 @@ class MCPServerManager(QMainWindow):
         self.deleted_mcps = set()
         self.installed_mcps = set()  # Track installed MCPs
         
+        # Initialize notification manager first
+        self.notification_manager = NotificationManager.instance()
+        
+        # Add method to handle notification removal
+        def on_notification_removed(notification):
+            self.notification_manager.on_notification_removed(notification)
+        
+        # Add the method to the instance
+        self.on_notification_removed = on_notification_removed
+        
         # Initialize file watcher
         self.file_watcher = QFileSystemWatcher(self)
         self.file_watcher.fileChanged.connect(self.handle_config_change)
@@ -855,15 +865,6 @@ class MCPServerManager(QMainWindow):
         # Load initial data and start monitoring
         self.load_all_data()
         self.setup_file_monitoring()
-        
-        self.notification_manager = NotificationManager.instance()
-        
-        # Add method to handle notification removal
-        def on_notification_removed(notification):
-            self.notification_manager.on_notification_removed(notification)
-        
-        # Add the method to the instance
-        self.on_notification_removed = on_notification_removed
     
     def setup_file_monitoring(self):
         """Set up monitoring for all server config files"""
