@@ -1,0 +1,10 @@
+{
+  "Slack": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-slack"],
+    "env": {
+      "SLACK_BOT_TOKEN": "Insert your Slack Bot Token here",
+      "SLACK_USER_TOKEN": "Insert your Slack User Token here (optional)"
+    }
+  }
+}
