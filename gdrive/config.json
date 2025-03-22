@@ -1,0 +1,8 @@
+{
+  "gdrive": {
+    "command": "node",
+    "args": [
+      "./dist"
+    ]
+  }
+}

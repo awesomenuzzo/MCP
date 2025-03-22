@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QGraphicsDropShadowEffect, QDialog, QLineEdit,
                             QFormLayout, QDialogButtonBox, QStackedWidget,
                             QMenu, QSizePolicy)
-from PyQt6.QtCore import Qt, QPoint, QRect, QFileSystemWatcher, QTimer
+from PyQt6.QtCore import Qt, QPoint, QRect, QFileSystemWatcher, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QIcon, QPixmap, QColor, QPainter, QLinearGradient, QFont, QGradient
 import config
 
@@ -474,6 +474,32 @@ class AppStorePage(QWidget):
             QWidget {{
                 background-color: {config.COLORS["background"]};
             }}
+            QScrollBar:vertical {{
+                border: none;
+                background-color: {config.COLORS["background"]};
+                width: 12px;
+                margin: 0px 2px 0px 2px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {config.COLORS["border"]};
+                min-height: 30px;
+                border-radius: 4px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: {config.COLORS["text_secondary"]};
+            }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{
+                height: 0;
+                border: none;
+                background: none;
+            }}
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {{
+                background: none;
+                border: none;
+            }}
         """)
         
         scroll_content = QWidget()
@@ -551,6 +577,123 @@ class AppStorePage(QWidget):
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to install MCP: {str(e)}")
+
+class ToastNotification(QFrame):
+    def __init__(self, parent=None, message="", duration=3000):
+        super().__init__(parent)
+        
+        # Set up the frame
+        self.setFixedWidth(300)
+        self.setStyleSheet(f"""
+            ToastNotification {{
+                background-color: {config.COLORS["card_background"]};
+                border-radius: 8px;
+                border: 1px solid {config.COLORS["border"]};
+            }}
+            QLabel {{
+                color: {config.COLORS["text_primary"]};
+                font-size: 14px;
+                padding: 0px;
+                background: transparent;
+            }}
+        """)
+        
+        # Add drop shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(10)
+        shadow.setColor(QColor(0, 0, 0, 60))
+        shadow.setOffset(0, 2)
+        self.setGraphicsEffect(shadow)
+        
+        # Create layout
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(8)
+        
+        # Add message
+        self.message_label = QLabel(message)
+        self.message_label.setWordWrap(True)
+        layout.addWidget(self.message_label)
+        
+        # Size the frame based on content
+        self.adjustSize()
+        
+        # Set up animations
+        self.fade_anim = QPropertyAnimation(self, b"windowOpacity")
+        self.fade_anim.setDuration(300)
+        self.fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        
+        # Show animation
+        self.setWindowOpacity(0.0)
+        self.fade_anim.setStartValue(0.0)
+        self.fade_anim.setEndValue(1.0)
+        self.fade_anim.start()
+        
+        # Set up timer for auto-hide
+        QTimer.singleShot(duration, self.hide_animation)
+    
+    def hide_animation(self):
+        self.fade_anim.setStartValue(1.0)
+        self.fade_anim.setEndValue(0.0)
+        self.fade_anim.finished.connect(self.on_fade_out_finished)
+        self.fade_anim.start()
+    
+    def on_fade_out_finished(self):
+        # Notify parent of removal before deletion
+        if hasattr(self.parent(), 'on_notification_removed'):
+            self.parent().on_notification_removed(self)
+        self.deleteLater()
+
+class NotificationManager:
+    _instance = None
+    
+    @classmethod
+    def instance(cls):
+        if cls._instance is None:
+            cls._instance = NotificationManager()
+        return cls._instance
+    
+    def __init__(self):
+        self.notifications = []
+        self.margin = 20
+        self.spacing = 10
+    
+    def show_notification(self, parent, message, duration=3000):
+        # Create new notification
+        notification = ToastNotification(parent, message, duration)
+        
+        # Remove any deleted notifications from the list
+        self.notifications = [n for n in self.notifications if n and not n.isHidden()]
+        
+        # Calculate position (top right with margin)
+        x = parent.width() - notification.width() - self.margin
+        
+        # Calculate y position based on existing notifications
+        y = self.margin
+        for existing in self.notifications:
+            if existing and not existing.isHidden():
+                y += existing.height() + self.spacing
+        
+        notification.move(x, y)
+        notification.show()
+        
+        # Add to notifications list
+        self.notifications.append(notification)
+    
+    def on_notification_removed(self, notification):
+        """Called when a notification is about to be removed"""
+        if notification in self.notifications:
+            self.notifications.remove(notification)
+            
+        # Reposition remaining notifications
+        if not self.notifications:
+            return
+            
+        y = self.margin
+        for n in self.notifications:
+            if n and not n.isHidden():
+                n.move(n.x(), y)
+                y += n.height() + self.spacing
 
 class MCPServerManager(QMainWindow):
     def __init__(self):
@@ -652,16 +795,32 @@ class MCPServerManager(QMainWindow):
         # Load initial data and start monitoring
         self.load_all_data()
         self.setup_file_monitoring()
+        
+        self.notification_manager = NotificationManager.instance()
+        
+        # Add method to handle notification removal
+        def on_notification_removed(notification):
+            self.notification_manager.on_notification_removed(notification)
+        
+        # Add the method to the instance
+        self.on_notification_removed = on_notification_removed
     
     def setup_file_monitoring(self):
-        """Set up monitoring for all relevant config files"""
-        # Add all application config files to the watcher
-        for app_config in config.APPLICATIONS.values():
-            config_path = app_config["config_path"]
+        """Set up monitoring for all server config files"""
+        parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # Scan for server config files
+        for item in os.listdir(parent_dir):
+            if item.startswith('.') or item == "MasterServer":
+                continue
+                
+            full_path = os.path.join(parent_dir, item)
+            if not os.path.isdir(full_path):
+                continue
+                
+            config_path = os.path.join(full_path, "config.json")
             if os.path.exists(config_path):
                 self.file_watcher.addPath(config_path)
-            # Create parent directory if it doesn't exist
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
     
     def handle_config_change(self, path):
         """Handle a config file change event"""
@@ -676,46 +835,85 @@ class MCPServerManager(QMainWindow):
             self.file_watcher.addPath(path)
     
     def process_config_changes(self):
-        """Process all pending config changes"""
+        """Process all pending server config changes"""
         if not self.pending_changes:
             return
             
         try:
-            # Track which applications had changes
+            # Track which applications need to be updated
             apps_with_changes = set()
             
-            # Process each changed file
+            # Process each changed server config file
             for path in self.pending_changes:
-                for app_id, app_config in config.APPLICATIONS.items():
-                    if app_config["config_path"] == path:
-                        apps_with_changes.add(app_config["name"])
-                        break
+                try:
+                    # Get the server name from the path
+                    server_dir = os.path.dirname(path)
+                    server_name = os.path.basename(server_dir)
+                    
+                    # Load the updated server config
+                    with open(path, 'r') as f:
+                        server_config = json.load(f)
+                    
+                    # Update the server in our servers dictionary
+                    if server_name in self.servers:
+                        # Update the config while preserving the path
+                        self.servers[server_name]["config"] = server_config
+                        
+                        # If this server is enabled, update all application configs
+                        if server_name in self.enabled_servers:
+                            for app_id, app_config in config.APPLICATIONS.items():
+                                try:
+                                    with open(app_config["config_path"], 'r') as f:
+                                        app_data = json.load(f)
+                                        if app_config["config_key"] in app_data and server_name in app_data[app_config["config_key"]]:
+                                            # Get the current server config from the app
+                                            current_app_config = app_data[app_config["config_key"]][server_name]
+                                            
+                                            # Create a new config that preserves required fields
+                                            new_config = {
+                                                "command": current_app_config.get("command", server_config.get("command", "")),
+                                                "args": server_config.get("args", []),
+                                                "env": current_app_config.get("env", {})
+                                            }
+                                            
+                                            # Update any other fields from the server config
+                                            for key, value in server_config.items():
+                                                if key not in ["command", "args", "env"]:
+                                                    new_config[key] = value
+                                            
+                                            # Update the server config in the app
+                                            app_data[app_config["config_key"]][server_name] = new_config
+                                            with open(app_config["config_path"], 'w') as f:
+                                                json.dump(app_data, f, indent=2)
+                                            apps_with_changes.add(app_config["name"])
+                                except:
+                                    continue
+                    
+                except Exception as e:
+                    print(f"Error processing server config change for {path}: {e}")
+                    continue
             
             # Clear pending changes
             self.pending_changes.clear()
             
-            # Reload and sync configurations
-            self.load_current_configs()
-            self.sync_application_configs()
+            # Update the UI
             self.populate_server_grid()
             
             # Notify user about changes
             if apps_with_changes:
                 apps_list = ", ".join(sorted(apps_with_changes))
-                QMessageBox.information(
+                self.notification_manager.show_notification(
                     self,
-                    "Configuration Changes Detected",
-                    f"MCP configurations have changed for: {apps_list}\n\n"
-                    f"The changes have been automatically synchronized.\n"
+                    f"Server configurations have changed and been synchronized with: {apps_list}\n\n"
                     f"Please restart these applications for the changes to take effect."
                 )
                 
         except Exception as e:
             print(f"Error processing config changes: {e}")
-            QMessageBox.warning(
+            self.notification_manager.show_notification(
                 self,
-                "Sync Error",
-                f"An error occurred while processing configuration changes: {str(e)}"
+                f"An error occurred while processing configuration changes: {str(e)}",
+                duration=5000
             )
     
     def setup_home_page(self):
@@ -744,6 +942,32 @@ class MCPServerManager(QMainWindow):
             }}
             QWidget {{
                 background-color: {config.COLORS["background"]};
+            }}
+            QScrollBar:vertical {{
+                border: none;
+                background-color: {config.COLORS["background"]};
+                width: 12px;
+                margin: 0px 2px 0px 2px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {config.COLORS["border"]};
+                min-height: 30px;
+                border-radius: 4px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: {config.COLORS["text_secondary"]};
+            }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{
+                height: 0;
+                border: none;
+                background: none;
+            }}
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {{
+                background: none;
+                border: none;
             }}
         """)
         
@@ -863,12 +1087,18 @@ class MCPServerManager(QMainWindow):
             
             # Show success message
             app_names = [app["name"] for app in config.APPLICATIONS.values()]
-            QMessageBox.information(self, "Success", 
-                                  f"MCP '{server_name}' has been removed!\n"
-                                  f"Please restart {', '.join(app_names)} for changes to take effect.")
+            self.notification_manager.show_notification(
+                self,
+                f"MCP '{server_name}' has been removed!\n"
+                f"Please restart {', '.join(app_names)} for changes to take effect."
+            )
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to remove MCP: {str(e)}")
+            self.notification_manager.show_notification(
+                self,
+                f"Failed to remove MCP: {str(e)}",
+                duration=5000
+            )
 
     def populate_server_grid(self):
         """Populate the main window grid with installed MCPs"""
@@ -934,12 +1164,18 @@ class MCPServerManager(QMainWindow):
             self.refresh_server_states()
             
             app_names = [app["name"] for app in config.APPLICATIONS.values()]
-            QMessageBox.information(self, "Success", 
-                                  f"Server '{server_name}' has been disabled!\n"
-                                  f"Please restart {', '.join(app_names)} for changes to take effect.")
+            self.notification_manager.show_notification(
+                self,
+                f"Server '{server_name}' has been disabled!\n"
+                f"Please restart {', '.join(app_names)} for changes to take effect."
+            )
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to disable server: {str(e)}")
+            self.notification_manager.show_notification(
+                self,
+                f"Failed to disable server: {str(e)}",
+                duration=5000
+            )
     
     def enable_server(self, server_name):
         server_info = self.servers[server_name]
@@ -1003,12 +1239,18 @@ class MCPServerManager(QMainWindow):
             self.refresh_server_states()
                 
             app_names = [app["name"] for app in config.APPLICATIONS.values()]
-            QMessageBox.information(self, "Success", 
-                                  f"Server '{server_name}' has been enabled!\n"
-                                  f"Please restart {', '.join(app_names)} for changes to take effect.")
+            self.notification_manager.show_notification(
+                self,
+                f"Server '{server_name}' has been enabled!\n"
+                f"Please restart {', '.join(app_names)} for changes to take effect."
+            )
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save configuration: {str(e)}")
+            self.notification_manager.show_notification(
+                self,
+                f"Failed to save configuration: {str(e)}",
+                duration=5000
+            )
     
     def refresh_server_states(self):
         # Update all server cards' button states
@@ -1252,19 +1494,18 @@ class MCPServerManager(QMainWindow):
             # If there were any changes, notify the user
             if apps_with_changes:
                 apps_list = ", ".join(sorted(apps_with_changes))
-                QMessageBox.information(
+                self.notification_manager.show_notification(
                     self,
-                    "Configuration Changes",
-                    f"MCP configurations have been updated for: {apps_list}\n\n"
+                    f"MCP configurations have been updated for: {apps_list}\n"
                     f"Please restart these applications for the changes to take effect."
                 )
             
         except Exception as e:
             print(f"Error syncing application configs: {e}")
-            QMessageBox.warning(
+            self.notification_manager.show_notification(
                 self,
-                "Sync Error",
-                f"An error occurred while syncing configurations: {str(e)}"
+                f"Error syncing configurations: {str(e)}",
+                duration=5000
             )
 
 def main():
