@@ -1,0 +1,16 @@
+{
+  "Atlassian": {
+    "command": "uvx",
+    "args": ["mcp-atlassian"],
+    "env": {
+      "CONFLUENCE_URL": "Insert your Confluence URL here (e.g., https://your-domain.atlassian.net/wiki)",
+      "CONFLUENCE_USERNAME": "Insert your Confluence username here (for Cloud)",
+      "CONFLUENCE_API_TOKEN": "Insert your Confluence API token here (for Cloud)",
+      "CONFLUENCE_PERSONAL_TOKEN": "Insert your Confluence Personal Access Token here (for Server/Data Center)",
+      "JIRA_URL": "Insert your Jira URL here (e.g., https://your-domain.atlassian.net)",
+      "JIRA_USERNAME": "Insert your Jira username here (for Cloud)",
+      "JIRA_API_TOKEN": "Insert your Jira API token here (for Cloud)",
+      "JIRA_PERSONAL_TOKEN": "Insert your Jira Personal Access Token here (for Server/Data Center)"
+    }
+  }
+}
