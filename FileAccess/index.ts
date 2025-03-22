@@ -333,7 +333,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: "read_file",
+        name: "mcp0_read_file",
         description:
           "Read the complete contents of a file from the file system. " +
           "Handles various text encodings and provides detailed error messages " +
@@ -342,7 +342,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: zodToJsonSchema(ReadFileArgsSchema) as ToolInput,
       },
       {
-        name: "read_multiple_files",
+        name: "mcp0_read_multiple_files",
         description:
           "Read the contents of multiple files simultaneously. This is more " +
           "efficient than reading files one by one when you need to analyze " +
@@ -352,7 +352,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: zodToJsonSchema(ReadMultipleFilesArgsSchema) as ToolInput,
       },
       {
-        name: "write_file",
+        name: "mcp0_write_file",
         description:
           "Create a new file or completely overwrite an existing file with new content. " +
           "Use with caution as it will overwrite existing files without warning. " +
@@ -360,7 +360,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: zodToJsonSchema(WriteFileArgsSchema) as ToolInput,
       },
       {
-        name: "edit_file",
+        name: "mcp0_edit_file",
         description:
           "Make line-based edits to a text file. Each edit replaces exact line sequences " +
           "with new content. Returns a git-style diff showing the changes made. " +
@@ -368,7 +368,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: zodToJsonSchema(EditFileArgsSchema) as ToolInput,
       },
       {
-        name: "create_directory",
+        name: "mcp0_create_directory",
         description:
           "Create a new directory or ensure a directory exists. Can create multiple " +
           "nested directories in one operation. If the directory already exists, " +
@@ -377,7 +377,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: zodToJsonSchema(CreateDirectoryArgsSchema) as ToolInput,
       },
       {
-        name: "list_directory",
+        name: "mcp0_list_directory",
         description:
           "Get a detailed listing of all files and directories in a specified path. " +
           "Results clearly distinguish between files and directories with [FILE] and [DIR] " +
@@ -386,7 +386,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: zodToJsonSchema(ListDirectoryArgsSchema) as ToolInput,
       },
       {
-        name: "directory_tree",
+        name: "mcp0_directory_tree",
         description:
             "Get a recursive tree view of files and directories as a JSON structure. " +
             "Each entry includes 'name', 'type' (file/directory), and 'children' for directories. " +
@@ -395,7 +395,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: zodToJsonSchema(DirectoryTreeArgsSchema) as ToolInput,
       },
       {
-        name: "move_file",
+        name: "mcp0_move_file",
         description:
           "Move or rename files and directories. Can move files between directories " +
           "and rename them in a single operation. If the destination exists, the " +
@@ -404,7 +404,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: zodToJsonSchema(MoveFileArgsSchema) as ToolInput,
       },
       {
-        name: "search_files",
+        name: "mcp0_search_files",
         description:
           "Recursively search for files and directories matching a pattern. " +
           "Searches through all subdirectories from the starting path. The search " +
@@ -414,7 +414,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: zodToJsonSchema(SearchFilesArgsSchema) as ToolInput,
       },
       {
-        name: "get_file_info",
+        name: "mcp0_get_file_info",
         description:
           "Retrieve detailed metadata about a file or directory. Returns comprehensive " +
           "information including size, creation time, last modified time, permissions, " +
@@ -423,7 +423,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: zodToJsonSchema(GetFileInfoArgsSchema) as ToolInput,
       },
       {
-        name: "list_allowed_directories",
+        name: "mcp0_list_allowed_directories",
         description:
           "Returns the list of directories that this server is allowed to access. " +
           "Use this to understand which directories are available before trying to access files.",
@@ -443,7 +443,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
     switch (name) {
-      case "read_file": {
+      case "mcp0_read_file": {
         const parsed = ReadFileArgsSchema.safeParse(args);
         if (!parsed.success) {
           throw new Error(`Invalid arguments for read_file: ${parsed.error}`);
@@ -455,7 +455,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "read_multiple_files": {
+      case "mcp0_read_multiple_files": {
         const parsed = ReadMultipleFilesArgsSchema.safeParse(args);
         if (!parsed.success) {
           throw new Error(`Invalid arguments for read_multiple_files: ${parsed.error}`);
@@ -477,7 +477,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "write_file": {
+      case "mcp0_write_file": {
         const parsed = WriteFileArgsSchema.safeParse(args);
         if (!parsed.success) {
           throw new Error(`Invalid arguments for write_file: ${parsed.error}`);
@@ -489,7 +489,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "edit_file": {
+      case "mcp0_edit_file": {
         const parsed = EditFileArgsSchema.safeParse(args);
         if (!parsed.success) {
           throw new Error(`Invalid arguments for edit_file: ${parsed.error}`);
@@ -501,7 +501,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "create_directory": {
+      case "mcp0_create_directory": {
         const parsed = CreateDirectoryArgsSchema.safeParse(args);
         if (!parsed.success) {
           throw new Error(`Invalid arguments for create_directory: ${parsed.error}`);
@@ -513,7 +513,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "list_directory": {
+      case "mcp0_list_directory": {
         const parsed = ListDirectoryArgsSchema.safeParse(args);
         if (!parsed.success) {
           throw new Error(`Invalid arguments for list_directory: ${parsed.error}`);
@@ -528,7 +528,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-        case "directory_tree": {
+        case "mcp0_directory_tree": {
             const parsed = DirectoryTreeArgsSchema.safeParse(args);
             if (!parsed.success) {
                 throw new Error(`Invalid arguments for directory_tree: ${parsed.error}`);
@@ -571,7 +571,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             };
         }
 
-      case "move_file": {
+      case "mcp0_move_file": {
         const parsed = MoveFileArgsSchema.safeParse(args);
         if (!parsed.success) {
           throw new Error(`Invalid arguments for move_file: ${parsed.error}`);
@@ -584,7 +584,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "search_files": {
+      case "mcp0_search_files": {
         const parsed = SearchFilesArgsSchema.safeParse(args);
         if (!parsed.success) {
           throw new Error(`Invalid arguments for search_files: ${parsed.error}`);
@@ -596,7 +596,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "get_file_info": {
+      case "mcp0_get_file_info": {
         const parsed = GetFileInfoArgsSchema.safeParse(args);
         if (!parsed.success) {
           throw new Error(`Invalid arguments for get_file_info: ${parsed.error}`);
@@ -610,7 +610,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "list_allowed_directories": {
+      case "mcp0_list_allowed_directories": {
         return {
           content: [{
             type: "text",
