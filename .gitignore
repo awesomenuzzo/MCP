@@ -43,3 +43,5 @@
 **/*.so
 **/*.dylib
 **/*.dll
+
+NWS/config.json

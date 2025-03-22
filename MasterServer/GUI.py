@@ -391,6 +391,7 @@ class MCPServerManager(QMainWindow):
         self.load_servers()
         self.load_current_configs()
         self.load_environment_variables()
+        self.sync_application_configs()
         self.populate_server_grid()
     
     def load_servers(self):
@@ -399,23 +400,15 @@ class MCPServerManager(QMainWindow):
         
         # First load current enabled servers to check for changes
         enabled_servers = set()
-        if os.path.exists(config.CLAUDE_CONFIG_PATH):
-            try:
-                with open(config.CLAUDE_CONFIG_PATH, 'r') as f:
-                    config_data = json.load(f)
-                    if "mcpServers" in config_data:
-                        enabled_servers.update(config_data["mcpServers"].keys())
-            except:
-                pass
-        
-        if os.path.exists(config.CURSOR_CONFIG_PATH):
-            try:
-                with open(config.CURSOR_CONFIG_PATH, 'r') as f:
-                    config_data = json.load(f)
-                    if "mcpServers" in config_data:
-                        enabled_servers.update(config_data["mcpServers"].keys())
-            except:
-                pass
+        for app_id, app_config in config.APPLICATIONS.items():
+            if os.path.exists(app_config["config_path"]):
+                try:
+                    with open(app_config["config_path"], 'r') as f:
+                        app_data = json.load(f)
+                        if app_config["config_key"] in app_data:
+                            enabled_servers.update(app_data[app_config["config_key"]].keys())
+                except:
+                    pass
         
         # Scan for directories that might be servers
         for item in os.listdir(parent_dir):
@@ -453,63 +446,29 @@ class MCPServerManager(QMainWindow):
                     
                     # If this server is enabled, update its configuration
                     if server_name in enabled_servers:
-                        try:
-                            # Handle Claude config
-                            claude_config_path = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
-                            if os.path.exists(claude_config_path):
-                                with open(claude_config_path, 'r') as f:
-                                    claude_config = json.load(f)
-                                    if "mcpServers" in claude_config and server_name in claude_config["mcpServers"]:
-                                        # Preserve environment variables if they exist
-                                        env_vars = claude_config["mcpServers"][server_name].get("env", {})
-                                        server_data_with_env = server_data.copy()
-                                        server_data_with_env["env"] = env_vars
-                                        claude_config["mcpServers"][server_name] = server_data_with_env
-                                        with open(claude_config_path, 'w') as f:
-                                            json.dump(claude_config, f, indent=2)
-                            
-                            # Handle Cursor config
-                            cursor_config_path = os.path.expanduser("~/.cursor/mcp.json")
-                            if os.path.exists(cursor_config_path):
-                                with open(cursor_config_path, 'r') as f:
-                                    cursor_config = json.load(f)
-                                    if "mcpServers" in cursor_config and server_name in cursor_config["mcpServers"]:
-                                        # Preserve environment variables if they exist
-                                        env_vars = cursor_config["mcpServers"][server_name].get("env", {})
-                                        server_data_with_env = server_data.copy()
-                                        server_data_with_env["env"] = env_vars
-                                        cursor_config["mcpServers"][server_name] = server_data_with_env
-                                        with open(cursor_config_path, 'w') as f:
-                                            json.dump(cursor_config, f, indent=2)
-                        except Exception as e:
-                            print(f"Error updating enabled server {server_name}: {e}")
+                        self.update_server_config(server_name, server_data)
                             
             except Exception as e:
                 print(f"Error loading config from {config_path}: {e}")
-    
-    def load_current_configs(self):
-        self.enabled_servers = set()
-        
-        # Check Claude config
-        if os.path.exists(config.CLAUDE_CONFIG_PATH):
-            try:
-                with open(config.CLAUDE_CONFIG_PATH, 'r') as f:
-                    config_data = json.load(f)
-                    if "mcpServers" in config_data:
-                        self.enabled_servers.update(config_data["mcpServers"].keys())
-            except:
-                pass
-        
-        # Check Cursor config
-        if os.path.exists(config.CURSOR_CONFIG_PATH):
-            try:
-                with open(config.CURSOR_CONFIG_PATH, 'r') as f:
-                    config_data = json.load(f)
-                    if "mcpServers" in config_data:
-                        self.enabled_servers.update(config_data["mcpServers"].keys())
-            except:
-                pass
-    
+
+    def update_server_config(self, server_name, server_data):
+        """Update server configuration across all applications"""
+        try:
+            for app_id, app_config in config.APPLICATIONS.items():
+                if os.path.exists(app_config["config_path"]):
+                    with open(app_config["config_path"], 'r') as f:
+                        app_config_data = json.load(f)
+                        if app_config["config_key"] in app_config_data and server_name in app_config_data[app_config["config_key"]]:
+                            # Preserve environment variables if they exist
+                            env_vars = app_config_data[app_config["config_key"]][server_name].get("env", {})
+                            server_data_with_env = server_data.copy()
+                            server_data_with_env["env"] = env_vars
+                            app_config_data[app_config["config_key"]][server_name] = server_data_with_env
+                            with open(app_config["config_path"], 'w') as f:
+                                json.dump(app_config_data, f, indent=2)
+        except Exception as e:
+            print(f"Error updating enabled server {server_name}: {e}")
+
     def load_environment_variables(self):
         self.env_vars = {}
         if os.path.exists(config.ENV_VARS_PATH):
@@ -518,7 +477,118 @@ class MCPServerManager(QMainWindow):
                     self.env_vars = json.load(f)
             except:
                 pass
+                
+        # Check Windsurf config
+        if os.path.exists(config.WINDSURF_CONFIG_PATH):
+            try:
+                with open(config.WINDSURF_CONFIG_PATH, 'r') as f:
+                    windsurf_config = json.load(f)
+                    if "mcpServers" in windsurf_config:
+                        self.enabled_servers.update(windsurf_config["mcpServers"].keys())
+            except:
+                pass
     
+    def ensure_config_exists(self, app_config):
+        """Ensure the config file exists and has the correct structure"""
+        try:
+            os.makedirs(os.path.dirname(app_config["config_path"]), exist_ok=True)
+            
+            # If file doesn't exist, create it with empty mcpServers object
+            if not os.path.exists(app_config["config_path"]):
+                with open(app_config["config_path"], 'w') as f:
+                    json.dump({app_config["config_key"]: {}}, f, indent=2)
+            
+            # If file exists but doesn't have mcpServers, add it
+            else:
+                try:
+                    with open(app_config["config_path"], 'r') as f:
+                        app_data = json.load(f)
+                        if app_config["config_key"] not in app_data:
+                            app_data[app_config["config_key"]] = {}
+                            with open(app_config["config_path"], 'w') as f:
+                                json.dump(app_data, f, indent=2)
+                except json.JSONDecodeError:
+                    # If file is corrupted, create new one
+                    with open(app_config["config_path"], 'w') as f:
+                        json.dump({app_config["config_key"]: {}}, f, indent=2)
+        except Exception as e:
+            print(f"Error ensuring config exists for {app_config['name']}: {e}")
+
+    def load_current_configs(self):
+        self.enabled_servers = set()
+        
+        # Check all application configs
+        for app_id, app_config in config.APPLICATIONS.items():
+            self.ensure_config_exists(app_config)
+            try:
+                with open(app_config["config_path"], 'r') as f:
+                    app_data = json.load(f)
+                    if app_config["config_key"] in app_data:
+                        self.enabled_servers.update(app_data[app_config["config_key"]].keys())
+            except:
+                pass
+
+    def sync_application_configs(self):
+        """Ensure all application configs are in sync with enabled servers"""
+        try:
+            # Get all currently enabled servers from all applications
+            all_enabled_servers = set()
+            for app_id, app_config in config.APPLICATIONS.items():
+                self.ensure_config_exists(app_config)
+                try:
+                    with open(app_config["config_path"], 'r') as f:
+                        app_data = json.load(f)
+                        if app_config["config_key"] in app_data:
+                            all_enabled_servers.update(app_data[app_config["config_key"]].keys())
+                except:
+                    continue
+
+            # For each enabled server, ensure it exists in all application configs
+            for server_name in all_enabled_servers:
+                if server_name not in self.servers:
+                    # If server doesn't exist anymore, remove it from all configs
+                    for app_id, app_config in config.APPLICATIONS.items():
+                        self.ensure_config_exists(app_config)
+                        try:
+                            with open(app_config["config_path"], 'r') as f:
+                                app_data = json.load(f)
+                                if app_config["config_key"] in app_data and server_name in app_data[app_config["config_key"]]:
+                                    del app_data[app_config["config_key"]][server_name]
+                                    with open(app_config["config_path"], 'w') as f:
+                                        json.dump(app_data, f, indent=2)
+                        except:
+                            continue
+                else:
+                    # If server exists, ensure it's properly configured in all apps
+                    server_data = self.servers[server_name]["config"]
+                    for app_id, app_config in config.APPLICATIONS.items():
+                        self.ensure_config_exists(app_config)
+                        try:
+                            with open(app_config["config_path"], 'r') as f:
+                                app_data = json.load(f)
+                                if app_config["config_key"] not in app_data:
+                                    app_data[app_config["config_key"]] = {}
+                                
+                                # Preserve environment variables if they exist
+                                if server_name in app_data[app_config["config_key"]]:
+                                    env_vars = app_data[app_config["config_key"]][server_name].get("env", {})
+                                    server_data_with_env = server_data.copy()
+                                    server_data_with_env["env"] = env_vars
+                                    app_data[app_config["config_key"]][server_name] = server_data_with_env
+                                else:
+                                    app_data[app_config["config_key"]][server_name] = server_data
+                                
+                                with open(app_config["config_path"], 'w') as f:
+                                    json.dump(app_data, f, indent=2)
+                        except:
+                            continue
+
+            # Update our enabled servers set to match the actual state
+            self.enabled_servers = all_enabled_servers.intersection(self.servers.keys())
+            
+        except Exception as e:
+            print(f"Error syncing application configs: {e}")
+
     def populate_server_grid(self):
         # Add cards in a single column
         for server_name, server_info in self.servers.items():
@@ -536,39 +606,27 @@ class MCPServerManager(QMainWindow):
     
     def disable_server(self, server_name):
         try:
-            # Handle Claude config
-            claude_config_path = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
-            if os.path.exists(claude_config_path):
-                try:
-                    with open(claude_config_path, 'r') as f:
-                        config = json.load(f)
-                        if "mcpServers" in config and server_name in config["mcpServers"]:
-                            del config["mcpServers"][server_name]
-                            with open(claude_config_path, 'w') as f:
-                                json.dump(config, f, indent=2)
-                except:
-                    pass
-            
-            # Handle Cursor config
-            cursor_config_path = os.path.expanduser("~/.cursor/mcp.json")
-            if os.path.exists(cursor_config_path):
-                try:
-                    with open(cursor_config_path, 'r') as f:
-                        config = json.load(f)
-                        if "mcpServers" in config and server_name in config["mcpServers"]:
-                            del config["mcpServers"][server_name]
-                            with open(cursor_config_path, 'w') as f:
-                                json.dump(config, f, indent=2)
-                except:
-                    pass
+            # Update all application configs
+            for app_id, app_config in config.APPLICATIONS.items():
+                if os.path.exists(app_config["config_path"]):
+                    try:
+                        with open(app_config["config_path"], 'r') as f:
+                            app_data = json.load(f)
+                            if app_config["config_key"] in app_data and server_name in app_data[app_config["config_key"]]:
+                                del app_data[app_config["config_key"]][server_name]
+                                with open(app_config["config_path"], 'w') as f:
+                                    json.dump(app_data, f, indent=2)
+                    except:
+                        pass
             
             # Update UI
             self.enabled_servers.discard(server_name)
             self.refresh_server_states()
             
+            app_names = [app["name"] for app in config.APPLICATIONS.values()]
             QMessageBox.information(self, "Success", 
                                   f"Server '{server_name}' has been disabled!\n"
-                                  "Please restart Claude and Cursor for changes to take effect.")
+                                  f"Please restart {', '.join(app_names)} for changes to take effect.")
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to disable server: {str(e)}")
@@ -596,66 +654,43 @@ class MCPServerManager(QMainWindow):
                 return  # User cancelled
         
         try:
-            # Handle Claude config
-            claude_config_path = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
-            os.makedirs(os.path.dirname(claude_config_path), exist_ok=True)
-            
-            # Load existing Claude config or create new one
-            existing_claude_config = {}
-            if os.path.exists(claude_config_path):
-                try:
-                    with open(claude_config_path, 'r') as f:
-                        existing_claude_config = json.load(f)
-                except json.JSONDecodeError:
-                    pass
-            
-            # Initialize mcpServers if it doesn't exist
-            if "mcpServers" not in existing_claude_config:
-                existing_claude_config["mcpServers"] = {}
-            
-            # Update the specific server config with environment variables
-            server_config_with_env = server_config.copy()
-            if env_vars and server_name in self.env_vars:
-                server_config_with_env["env"] = self.env_vars[server_name]
-            
-            # Update the specific server config
-            existing_claude_config["mcpServers"][server_name] = server_config_with_env
-            
-            # Save updated Claude config
-            with open(claude_config_path, 'w') as f:
-                json.dump(existing_claude_config, f, indent=2)
+            # Update all application configs
+            for app_id, app_config in config.APPLICATIONS.items():
+                os.makedirs(os.path.dirname(app_config["config_path"]), exist_ok=True)
                 
-            # Handle Cursor config
-            cursor_config_path = os.path.expanduser("~/.cursor/mcp.json")
-            os.makedirs(os.path.dirname(cursor_config_path), exist_ok=True)
-            
-            # Load existing Cursor config or create new one
-            existing_cursor_config = {}
-            if os.path.exists(cursor_config_path):
-                try:
-                    with open(cursor_config_path, 'r') as f:
-                        existing_cursor_config = json.load(f)
-                except json.JSONDecodeError:
-                    pass
-            
-            # Initialize mcpServers if it doesn't exist
-            if "mcpServers" not in existing_cursor_config:
-                existing_cursor_config["mcpServers"] = {}
-            
-            # Update the specific server config with environment variables
-            existing_cursor_config["mcpServers"][server_name] = server_config_with_env
-            
-            # Save updated Cursor config
-            with open(cursor_config_path, 'w') as f:
-                json.dump(existing_cursor_config, f, indent=2)
+                # Load existing config or create new one
+                app_data = {}
+                if os.path.exists(app_config["config_path"]):
+                    try:
+                        with open(app_config["config_path"], 'r') as f:
+                            app_data = json.load(f)
+                    except json.JSONDecodeError:
+                        pass
+                
+                # Initialize mcpServers if it doesn't exist
+                if app_config["config_key"] not in app_data:
+                    app_data[app_config["config_key"]] = {}
+                
+                # Update the specific server config with environment variables
+                server_config_with_env = server_config.copy()
+                if env_vars and server_name in self.env_vars:
+                    server_config_with_env["env"] = self.env_vars[server_name]
+                
+                # Update the specific server config
+                app_data[app_config["config_key"]][server_name] = server_config_with_env
+                
+                # Save updated config
+                with open(app_config["config_path"], 'w') as f:
+                    json.dump(app_data, f, indent=2)
             
             # Update UI
             self.enabled_servers.add(server_name)
             self.refresh_server_states()
                 
+            app_names = [app["name"] for app in config.APPLICATIONS.values()]
             QMessageBox.information(self, "Success", 
                                   f"Server '{server_name}' has been enabled!\n"
-                                  "Please restart Claude and Cursor for changes to take effect.")
+                                  f"Please restart {', '.join(app_names)} for changes to take effect.")
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save configuration: {str(e)}")

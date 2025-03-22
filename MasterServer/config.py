@@ -5,6 +5,26 @@ HOME_DIR = os.path.expanduser("~")
 CLAUDE_CONFIG_PATH = os.path.join(HOME_DIR, "Library/Application Support/Claude/claude_desktop_config.json")
 CURSOR_CONFIG_PATH = os.path.join(HOME_DIR, ".cursor/mcp.json")
 ENV_VARS_PATH = os.path.join(HOME_DIR, ".mcp_servers/env_vars.json")
+WINDSURF_CONFIG_PATH = os.path.join(HOME_DIR, ".codeium/windsurf/mcp_config.json")
+
+# Application Configurations
+APPLICATIONS = {
+    "claude": {
+        "name": "Claude",
+        "config_path": os.path.join(HOME_DIR, "Library/Application Support/Claude/claude_desktop_config.json"),
+        "config_key": "mcpServers"
+    },
+    "cursor": {
+        "name": "Cursor",
+        "config_path": os.path.join(HOME_DIR, ".cursor/mcp.json"),
+        "config_key": "mcpServers"
+    },
+    "windsurf": {
+        "name": "Windsurf",
+        "config_path": os.path.join(HOME_DIR, ".codeium/windsurf/mcp_config.json"),
+        "config_key": "mcpServers"
+    }
+}
 
 # UI Settings
 WINDOW_MIN_WIDTH = 1000
