@@ -4,59 +4,198 @@ import os
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QPushButton, QLabel, QListWidget, 
                             QMessageBox, QGridLayout, QFrame, QScrollArea,
-                            QGraphicsDropShadowEffect)
+                            QGraphicsDropShadowEffect, QDialog, QLineEdit,
+                            QFormLayout, QDialogButtonBox)
 from PyQt6.QtCore import Qt, QPoint
 from PyQt6.QtGui import QIcon, QPixmap, QColor, QPainter
+import config
+
+class EnvironmentVariablesDialog(QDialog):
+    def __init__(self, server_name, env_vars, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Environment Variables - {server_name}")
+        self.setMinimumWidth(config.ENV_DIALOG["min_width"])
+        self.setMinimumHeight(config.ENV_DIALOG["min_height"])
+        
+        # Set dialog style
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {config.COLORS["card_background"]};
+            }}
+            QLabel {{
+                font-size: 14px;
+                color: {config.COLORS["text_primary"]};
+                padding: 4px 0;
+            }}
+            QLineEdit {{
+                padding: 12px;
+                border: 2px solid {config.COLORS["border"]};
+                border-radius: 8px;
+                background-color: {config.COLORS["background"]};
+                font-size: 14px;
+                color: {config.COLORS["text_primary"]};
+                selection-background-color: {config.COLORS["primary"]};
+            }}
+            QLineEdit:focus {{
+                border: 2px solid {config.COLORS["primary"]};
+                background-color: {config.COLORS["card_background"]};
+            }}
+            QLineEdit:hover {{
+                background-color: {config.COLORS["card_background"]};
+                border: 2px solid #ccc;
+            }}
+            QPushButton {{
+                padding: 12px 24px;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 500;
+                border: none;
+            }}
+            QPushButton#okButton {{
+                background-color: {config.COLORS["primary"]};
+                color: white;
+            }}
+            QPushButton#okButton:hover {{
+                background-color: {config.COLORS["primary_hover"]};
+            }}
+            QPushButton#cancelButton {{
+                background-color: {config.COLORS["background"]};
+                color: {config.COLORS["text_primary"]};
+            }}
+            QPushButton#cancelButton:hover {{
+                background-color: {config.COLORS["border"]};
+            }}
+        """)
+        
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+        layout.setContentsMargins(config.ENV_DIALOG["padding"], config.ENV_DIALOG["padding"], 
+                                config.ENV_DIALOG["padding"], config.ENV_DIALOG["padding"])
+        
+        # Header
+        header = QLabel("Configure Environment Variables")
+        header.setStyleSheet(f"""
+            font-size: 20px;
+            font-weight: bold;
+            color: {config.COLORS["text_primary"]};
+            margin-bottom: 8px;
+        """)
+        layout.addWidget(header)
+        
+        # Description
+        description = QLabel("These values will be securely stored and used when the server is enabled.")
+        description.setStyleSheet(f"""
+            font-size: 14px;
+            color: {config.COLORS["text_secondary"]};
+            margin-bottom: 16px;
+        """)
+        layout.addWidget(description)
+        
+        # Form layout for environment variables
+        form_widget = QWidget()
+        form_layout = QFormLayout(form_widget)
+        form_layout.setSpacing(16)
+        form_layout.setContentsMargins(0, 0, 0, 0)
+        self.env_inputs = {}
+        
+        for var_name, var_value in env_vars.items():
+            # Create a container for each row
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(16)
+            
+            # Label
+            label = QLabel(var_name + ":")
+            label.setMinimumWidth(config.ENV_DIALOG["label_min_width"])
+            
+            # Input field
+            input_field = QLineEdit(var_value)
+            input_field.setPlaceholderText(f"Enter value for {var_name}")
+            
+            row_layout.addWidget(label)
+            row_layout.addWidget(input_field, 1)
+            
+            form_layout.addRow(row_widget)
+            self.env_inputs[var_name] = input_field
+        
+        layout.addWidget(form_widget)
+        layout.addStretch()
+        
+        # Buttons
+        button_container = QWidget()
+        button_layout = QHBoxLayout(button_container)
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(12)
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setObjectName("cancelButton")
+        cancel_btn.clicked.connect(self.reject)
+        
+        ok_btn = QPushButton("Save Changes")
+        ok_btn.setObjectName("okButton")
+        ok_btn.clicked.connect(self.accept)
+        
+        button_layout.addWidget(cancel_btn)
+        button_layout.addWidget(ok_btn)
+        
+        layout.addWidget(button_container)
+    
+    def get_environment_variables(self):
+        return {
+            var_name: input_field.text()
+            for var_name, input_field in self.env_inputs.items()
+        }
 
 class ServerCard(QFrame):
-    def __init__(self, name, config, server_path, is_enabled=False, parent=None):
+    def __init__(self, name, config_data, server_path, is_enabled=False, parent=None):
         super().__init__(parent)
         self.setFrameStyle(QFrame.Shape.NoFrame)
-        self.setStyleSheet("""
-            ServerCard {
-                background: white;
-                border-radius: 12px;
-                border: 1px solid #e0e0e0;
-            }
-            ServerCard:hover {
-                border: 1px solid #0078d4;
-                background-color: #ffffff;
-            }
-            QLabel#titleLabel {
+        self.setStyleSheet(f"""
+            ServerCard {{
+                background: {config.COLORS["card_background"]};
+                border-radius: {config.CARD_STYLES["border_radius"]}px;
+                border: 1px solid {config.COLORS["border"]};
+            }}
+            ServerCard:hover {{
+                border: 1px solid {config.COLORS["primary"]};
+                background-color: {config.COLORS["card_background"]};
+            }}
+            QLabel#titleLabel {{
                 font-size: 20px;
                 font-weight: bold;
-                color: #1f1f1f;
+                color: {config.COLORS["text_primary"]};
                 background: transparent;
-            }
-            QLabel#descriptionLabel {
-                color: #666;
+            }}
+            QLabel#descriptionLabel {{
+                color: {config.COLORS["text_secondary"]};
                 font-size: 14px;
                 background: transparent;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 border: none;
                 padding: 8px 24px;
                 border-radius: 6px;
                 color: white;
                 font-size: 14px;
                 font-weight: 500;
-                min-width: 140px;
-            }
-            QPushButton#enableButton {
-                background-color: #0078d4;
-            }
-            QPushButton#enableButton:hover {
-                background-color: #006cbd;
-            }
-            QPushButton#disableButton {
-                background-color: #d83b01;
-            }
-            QPushButton#disableButton:hover {
-                background-color: #a92d01;
-            }
-            QWidget {
+                min-width: {config.CARD_STYLES["button_min_width"]}px;
+            }}
+            QPushButton#enableButton {{
+                background-color: {config.COLORS["primary"]};
+            }}
+            QPushButton#enableButton:hover {{
+                background-color: {config.COLORS["primary_hover"]};
+            }}
+            QPushButton#disableButton {{
+                background-color: {config.COLORS["danger"]};
+            }}
+            QPushButton#disableButton:hover {{
+                background-color: {config.COLORS["danger_hover"]};
+            }}
+            QWidget {{
                 background: transparent;
-            }
+            }}
         """)
         
         # Add shadow effect to the card
@@ -68,12 +207,13 @@ class ServerCard(QFrame):
         
         # Main horizontal layout
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
+        padding = config.CARD_STYLES["padding"]
+        layout.setContentsMargins(padding, padding, padding, padding)
         layout.setSpacing(24)
         
-        # Icon container (left side)
+        # Icon container
         icon_container = QWidget()
-        icon_container.setFixedSize(80, 80)  # Fix the container size
+        icon_container.setFixedSize(config.CARD_STYLES["icon_size"], config.CARD_STYLES["icon_size"])
         icon_layout = QVBoxLayout(icon_container)
         icon_layout.setContentsMargins(0, 0, 0, 0)
         icon_layout.setSpacing(0)
@@ -81,12 +221,12 @@ class ServerCard(QFrame):
         
         # Icon
         icon_label = QLabel()
-        icon_label.setFixedSize(80, 80)
+        icon_label.setFixedSize(config.CARD_STYLES["icon_size"], config.CARD_STYLES["icon_size"])
         icon_path = os.path.join(server_path, "icon.png")
         if os.path.exists(icon_path):
             original_pixmap = QPixmap(icon_path)
             # Create a square container size
-            container_size = 80
+            container_size = config.CARD_STYLES["icon_size"]
             
             # Calculate the scaling factor while preserving aspect ratio
             width = original_pixmap.width()
@@ -120,7 +260,7 @@ class ServerCard(QFrame):
             icon_label.setScaledContents(False)  # Don't let the label scale the contents
         else:
             # Use default blue placeholder
-            pixmap = QPixmap(80, 80)
+            pixmap = QPixmap(config.CARD_STYLES["icon_size"], config.CARD_STYLES["icon_size"])
             pixmap.fill(Qt.GlobalColor.blue)
             icon_label.setPixmap(pixmap)
         
@@ -194,8 +334,8 @@ class ServerCard(QFrame):
 class MCPServerManager(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("MCP Server Manager")
-        self.setMinimumSize(1000, 600)
+        self.setWindowTitle(config.WINDOW_TITLE)
+        self.setMinimumSize(config.WINDOW_MIN_WIDTH, config.WINDOW_MIN_HEIGHT)
         
         # Initialize the main widget and layout
         main_widget = QWidget()
@@ -205,11 +345,11 @@ class MCPServerManager(QMainWindow):
         main_layout.setSpacing(24)
         
         # Header
-        header = QLabel("MCP Server Manager")
-        header.setStyleSheet("""
+        header = QLabel(config.WINDOW_TITLE)
+        header.setStyleSheet(f"""
             font-size: 32px;
             font-weight: bold;
-            color: #1f1f1f;
+            color: {config.COLORS["text_primary"]};
             margin-bottom: 12px;
         """)
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -218,43 +358,64 @@ class MCPServerManager(QMainWindow):
         # Scroll area for server grid
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("""
-            QScrollArea {
+        scroll.setStyleSheet(f"""
+            QScrollArea {{
                 border: none;
                 background-color: transparent;
-            }
-            QWidget {
-                background-color: #f5f5f5;
-            }
+            }}
+            QWidget {{
+                background-color: {config.COLORS["background"]};
+            }}
         """)
         
         scroll_content = QWidget()
-        self.grid_layout = QVBoxLayout(scroll_content)  # Changed to VBoxLayout for single column
-        self.grid_layout.setSpacing(16)  # Space between cards
+        self.grid_layout = QVBoxLayout(scroll_content)
+        self.grid_layout.setSpacing(16)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
         self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         scroll.setWidget(scroll_content)
         main_layout.addWidget(scroll)
         
-        # Load servers from directories
-        self.load_servers()
-        
-        # Load current configurations
-        self.load_current_configs()
-        
-        # Populate server grid
-        self.populate_server_grid()
+        # Load initial data
+        self.load_all_data()
         
         # Set window style
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #f5f5f5;
-            }
+        self.setStyleSheet(f"""
+            QMainWindow {{
+                background-color: {config.COLORS["background"]};
+            }}
         """)
+    
+    def load_all_data(self):
+        """Load all data needed for the UI"""
+        self.load_servers()
+        self.load_current_configs()
+        self.load_environment_variables()
+        self.populate_server_grid()
     
     def load_servers(self):
         self.servers = {}
         parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # First load current enabled servers to check for changes
+        enabled_servers = set()
+        if os.path.exists(config.CLAUDE_CONFIG_PATH):
+            try:
+                with open(config.CLAUDE_CONFIG_PATH, 'r') as f:
+                    config_data = json.load(f)
+                    if "mcpServers" in config_data:
+                        enabled_servers.update(config_data["mcpServers"].keys())
+            except:
+                pass
+        
+        if os.path.exists(config.CURSOR_CONFIG_PATH):
+            try:
+                with open(config.CURSOR_CONFIG_PATH, 'r') as f:
+                    config_data = json.load(f)
+                    if "mcpServers" in config_data:
+                        enabled_servers.update(config_data["mcpServers"].keys())
+            except:
+                pass
         
         # Scan for directories that might be servers
         for item in os.listdir(parent_dir):
@@ -275,20 +436,54 @@ class MCPServerManager(QMainWindow):
                 
             try:
                 with open(config_path, 'r') as f:
-                    config = json.load(f)
+                    server_config = json.load(f)
                     
                 # Store server info with its path
-                for server_name, server_config in config.items():
+                for server_name, server_data in server_config.items():
                     # Update the command path if it's relative
-                    if "args" in server_config:
-                        for i, arg in enumerate(server_config["args"]):
+                    if "args" in server_data:
+                        for i, arg in enumerate(server_data["args"]):
                             if isinstance(arg, str) and arg.startswith("./"):
-                                server_config["args"][i] = os.path.join(full_path, arg[2:])
+                                server_data["args"][i] = os.path.join(full_path, arg[2:])
                     
                     self.servers[server_name] = {
-                        "config": server_config,
+                        "config": server_data,
                         "path": full_path
                     }
+                    
+                    # If this server is enabled, update its configuration
+                    if server_name in enabled_servers:
+                        try:
+                            # Handle Claude config
+                            claude_config_path = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
+                            if os.path.exists(claude_config_path):
+                                with open(claude_config_path, 'r') as f:
+                                    claude_config = json.load(f)
+                                    if "mcpServers" in claude_config and server_name in claude_config["mcpServers"]:
+                                        # Preserve environment variables if they exist
+                                        env_vars = claude_config["mcpServers"][server_name].get("env", {})
+                                        server_data_with_env = server_data.copy()
+                                        server_data_with_env["env"] = env_vars
+                                        claude_config["mcpServers"][server_name] = server_data_with_env
+                                        with open(claude_config_path, 'w') as f:
+                                            json.dump(claude_config, f, indent=2)
+                            
+                            # Handle Cursor config
+                            cursor_config_path = os.path.expanduser("~/.cursor/mcp.json")
+                            if os.path.exists(cursor_config_path):
+                                with open(cursor_config_path, 'r') as f:
+                                    cursor_config = json.load(f)
+                                    if "mcpServers" in cursor_config and server_name in cursor_config["mcpServers"]:
+                                        # Preserve environment variables if they exist
+                                        env_vars = cursor_config["mcpServers"][server_name].get("env", {})
+                                        server_data_with_env = server_data.copy()
+                                        server_data_with_env["env"] = env_vars
+                                        cursor_config["mcpServers"][server_name] = server_data_with_env
+                                        with open(cursor_config_path, 'w') as f:
+                                            json.dump(cursor_config, f, indent=2)
+                        except Exception as e:
+                            print(f"Error updating enabled server {server_name}: {e}")
+                            
             except Exception as e:
                 print(f"Error loading config from {config_path}: {e}")
     
@@ -296,24 +491,31 @@ class MCPServerManager(QMainWindow):
         self.enabled_servers = set()
         
         # Check Claude config
-        claude_config_path = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
-        if os.path.exists(claude_config_path):
+        if os.path.exists(config.CLAUDE_CONFIG_PATH):
             try:
-                with open(claude_config_path, 'r') as f:
-                    config = json.load(f)
-                    if "mcpServers" in config:
-                        self.enabled_servers.update(config["mcpServers"].keys())
+                with open(config.CLAUDE_CONFIG_PATH, 'r') as f:
+                    config_data = json.load(f)
+                    if "mcpServers" in config_data:
+                        self.enabled_servers.update(config_data["mcpServers"].keys())
             except:
                 pass
         
         # Check Cursor config
-        cursor_config_path = os.path.expanduser("~/.cursor/mcp.json")
-        if os.path.exists(cursor_config_path):
+        if os.path.exists(config.CURSOR_CONFIG_PATH):
             try:
-                with open(cursor_config_path, 'r') as f:
-                    config = json.load(f)
-                    if "mcpServers" in config:
-                        self.enabled_servers.update(config["mcpServers"].keys())
+                with open(config.CURSOR_CONFIG_PATH, 'r') as f:
+                    config_data = json.load(f)
+                    if "mcpServers" in config_data:
+                        self.enabled_servers.update(config_data["mcpServers"].keys())
+            except:
+                pass
+    
+    def load_environment_variables(self):
+        self.env_vars = {}
+        if os.path.exists(config.ENV_VARS_PATH):
+            try:
+                with open(config.ENV_VARS_PATH, 'r') as f:
+                    self.env_vars = json.load(f)
             except:
                 pass
     
@@ -375,6 +577,24 @@ class MCPServerManager(QMainWindow):
         server_info = self.servers[server_name]
         server_config = server_info["config"]
         
+        # Check if server has environment variables
+        env_vars = server_config.get("env", {})
+        if env_vars:
+            # Get existing values or defaults
+            existing_vars = self.env_vars.get(server_name, {})
+            for var_name in env_vars:
+                if var_name not in existing_vars:
+                    existing_vars[var_name] = env_vars[var_name]
+            
+            # Show dialog for environment variables
+            dialog = EnvironmentVariablesDialog(server_name, existing_vars, self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                # Save the environment variables
+                self.env_vars[server_name] = dialog.get_environment_variables()
+                self.save_environment_variables()
+            else:
+                return  # User cancelled
+        
         try:
             # Handle Claude config
             claude_config_path = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
@@ -393,8 +613,13 @@ class MCPServerManager(QMainWindow):
             if "mcpServers" not in existing_claude_config:
                 existing_claude_config["mcpServers"] = {}
             
+            # Update the specific server config with environment variables
+            server_config_with_env = server_config.copy()
+            if env_vars and server_name in self.env_vars:
+                server_config_with_env["env"] = self.env_vars[server_name]
+            
             # Update the specific server config
-            existing_claude_config["mcpServers"][server_name] = server_config
+            existing_claude_config["mcpServers"][server_name] = server_config_with_env
             
             # Save updated Claude config
             with open(claude_config_path, 'w') as f:
@@ -417,8 +642,8 @@ class MCPServerManager(QMainWindow):
             if "mcpServers" not in existing_cursor_config:
                 existing_cursor_config["mcpServers"] = {}
             
-            # Update the specific server config
-            existing_cursor_config["mcpServers"][server_name] = server_config
+            # Update the specific server config with environment variables
+            existing_cursor_config["mcpServers"][server_name] = server_config_with_env
             
             # Save updated Cursor config
             with open(cursor_config_path, 'w') as f:
@@ -442,6 +667,11 @@ class MCPServerManager(QMainWindow):
             if isinstance(widget, ServerCard):
                 server_name = widget.findChild(QLabel, "titleLabel").text()
                 widget.update_button_state(server_name in self.enabled_servers)
+
+    def save_environment_variables(self):
+        os.makedirs(os.path.dirname(config.ENV_VARS_PATH), exist_ok=True)
+        with open(config.ENV_VARS_PATH, 'w') as f:
+            json.dump(self.env_vars, f, indent=2)
 
 def main():
     app = QApplication(sys.argv)

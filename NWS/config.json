@@ -1,10 +1,12 @@
 {
     "NWS Weather": {
-        "command": "uv",
+        "command": "/Users/awesomenuzzo/.pyenv/shims/uv",
         "args": [
-            "--directory",
-            "/Users/awesomenuzzo/Documents/Projects/MCPServers/NWS",
             "run",
+            "--directory",
+            "/Users/awesomenuzzo/Documents/Projects/SVHub/MCPServers/NWS",
+            "--python",
+            "python3",
             "server.py"
         ]
     }
