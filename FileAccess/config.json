@@ -1,0 +1,13 @@
+{
+  "FileAccess": {
+    "command": "npx",
+    "args": [
+      "-y", 
+      "@modelcontextprotocol/server-filesystem",
+      "~/Documents",
+      "~/Downloads",
+      "~/Desktop"
+    ],
+    "env": {}
+  }
+}
