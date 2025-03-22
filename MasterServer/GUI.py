@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QMenu, QSizePolicy)
 from PyQt6.QtCore import Qt, QPoint, QRect, QFileSystemWatcher, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QIcon, QPixmap, QColor, QPainter, QLinearGradient, QFont, QGradient
+from PyQt6.QtSvg import QSvgRenderer
 import config
 
 class EnvironmentVariablesDialog(QDialog):
@@ -248,76 +249,135 @@ class ServerCard(QFrame):
         # Icon container
         icon_container = QWidget()
         icon_container.setFixedSize(config.CARD_STYLES["icon_size"], config.CARD_STYLES["icon_size"])
-        icon_layout = QVBoxLayout(icon_container)
+        icon_layout = QHBoxLayout(icon_container)  # Changed to QHBoxLayout for better centering
         icon_layout.setContentsMargins(0, 0, 0, 0)
         icon_layout.setSpacing(0)
-        icon_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Icon
         icon_label = QLabel()
         icon_label.setFixedSize(config.CARD_STYLES["icon_size"], config.CARD_STYLES["icon_size"])
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center the content in the label
+        
+        # Try to find an icon file (first PNG, then SVG)
         icon_path = os.path.join(server_path, "icon.png")
-        if os.path.exists(icon_path):
-            original_pixmap = QPixmap(icon_path)
-            # Create a square container size
-            container_size = config.CARD_STYLES["icon_size"]
-            
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(server_path, "icon.svg")
+            if not os.path.exists(icon_path):
+                # Use default logo if no icon exists
+                icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "default_icon.png")
+        
+        def create_scaled_pixmap(source_width, source_height, device_pixel_ratio, container_size, render_func):
+            """Common scaling function for both SVG and PNG images"""
             # Calculate the scaling factor while preserving aspect ratio
-            width = original_pixmap.width()
-            height = original_pixmap.height()
-            scale_factor = min(container_size / width, container_size / height) * 0.9  # Scale to 90% of container
-            new_width = int(width * scale_factor)
-            new_height = int(height * scale_factor)
+            scale_factor = min(container_size / source_width, container_size / source_height)
+            new_width = int(source_width * scale_factor)
+            new_height = int(source_height * scale_factor)
             
-            # Create a transparent background
-            final_pixmap = QPixmap(container_size, container_size)
+            # Create a transparent background with device pixel ratio awareness
+            final_pixmap = QPixmap(
+                int(container_size * device_pixel_ratio),
+                int(container_size * device_pixel_ratio)
+            )
+            final_pixmap.setDevicePixelRatio(device_pixel_ratio)
             final_pixmap.fill(Qt.GlobalColor.transparent)
             
-            # Scale the original image
-            scaled_pixmap = original_pixmap.scaled(
-                new_width, new_height,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
-            )
-            
             # Calculate position to center the scaled image
-            x = (container_size - new_width) // 2
-            y = (container_size - new_height) // 2
+            x = int((container_size * device_pixel_ratio - new_width * device_pixel_ratio) // 2)
+            y = int((container_size * device_pixel_ratio - new_height * device_pixel_ratio) // 2)
             
             # Draw the scaled image onto the transparent background
             painter = QPainter(final_pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-            painter.drawPixmap(x, y, scaled_pixmap)
+            
+            # Call the provided render function with calculated dimensions
+            render_func(painter, x, y, new_width, new_height, device_pixel_ratio)
             painter.end()
             
-            icon_label.setPixmap(final_pixmap)
-            icon_label.setScaledContents(False)  # Don't let the label scale the contents
+            return final_pixmap
+        
+        # Load the image based on its type
+        original_pixmap = None
+        if icon_path.lower().endswith('.svg'):
+            # Handle SVG files
+            renderer = QSvgRenderer(icon_path)
+            if renderer.isValid():
+                device_pixel_ratio = self.devicePixelRatio()
+                container_size = config.CARD_STYLES["icon_size"]
+                
+                def svg_render(painter, x, y, width, height, dpr):
+                    from PyQt6.QtCore import QRectF
+                    # Render SVG directly at the target size
+                    renderer.render(painter, QRectF(x/dpr, y/dpr, width, height))
+                
+                original_pixmap = create_scaled_pixmap(
+                    container_size,  # Use container size as source size
+                    container_size,  # Use container size as source size
+                    device_pixel_ratio,
+                    container_size,
+                    svg_render
+                )
         else:
-            # Create default MCP text icon
+            # Handle PNG and other bitmap formats
+            temp_pixmap = QPixmap(icon_path)
+            if not temp_pixmap.isNull():
+                device_pixel_ratio = self.devicePixelRatio()
+                container_size = config.CARD_STYLES["icon_size"]
+                
+                def png_render(painter, x, y, width, height, dpr):
+                    from PyQt6.QtCore import QPoint
+                    scaled_pixmap = temp_pixmap.scaled(
+                        int(width * dpr),
+                        int(height * dpr),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    scaled_pixmap.setDevicePixelRatio(dpr)
+                    painter.drawPixmap(QPoint(int(x), int(y)), scaled_pixmap)
+                
+                original_pixmap = create_scaled_pixmap(
+                    temp_pixmap.width(),
+                    temp_pixmap.height(),
+                    device_pixel_ratio,
+                    container_size,
+                    png_render
+                )
+        
+        # Check if the image loaded successfully
+        if original_pixmap is None or original_pixmap.isNull() or original_pixmap.width() == 0 or original_pixmap.height() == 0:
+            # Create a fallback pixmap with the first letter of the server name
             container_size = config.CARD_STYLES["icon_size"]
-            pixmap = QPixmap(container_size, container_size)
-            pixmap.fill(Qt.GlobalColor.transparent)
+            device_pixel_ratio = self.devicePixelRatio()
+            final_pixmap = QPixmap(
+                int(container_size * device_pixel_ratio),
+                int(container_size * device_pixel_ratio)
+            )
+            final_pixmap.setDevicePixelRatio(device_pixel_ratio)
+            final_pixmap.fill(Qt.GlobalColor.transparent)
             
-            painter = QPainter(pixmap)
+            # Draw the first letter
+            painter = QPainter(final_pixmap)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             
-            # Draw white background with rounded corners
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor("white"))
-            painter.drawRoundedRect(0, 0, container_size, container_size, 12, 12)
-            
-            # Draw text
-            font = QFont("Arial", 24)
+            # Set up the font
+            font = QFont()
+            font.setPointSize(24)
             font.setBold(True)
             painter.setFont(font)
             
-            # Draw text in primary color
-            painter.setPen(QColor(config.COLORS["primary"]))
-            painter.drawText(QRect(0, 0, container_size, container_size), 
-                           Qt.AlignmentFlag.AlignCenter, "M.C.P.")
-            
+            # Draw the letter
+            text = name[0].upper() if name else "M"
+            text_rect = painter.fontMetrics().boundingRect(text)
+            x = (container_size * device_pixel_ratio - text_rect.width()) // 2
+            y = (container_size * device_pixel_ratio + text_rect.height()) // 2
+            painter.setPen(QColor(config.COLORS["text_primary"]))
+            painter.drawText(x, y, text)
             painter.end()
-            icon_label.setPixmap(pixmap)
+        else:
+            final_pixmap = original_pixmap
+        
+        icon_label.setPixmap(final_pixmap)
+        icon_label.setScaledContents(False)  # Don't let the label scale the contents
         
         icon_layout.addWidget(icon_label)
         

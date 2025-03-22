@@ -50,7 +50,7 @@ COLORS = {
 CARD_STYLES = {
     "border_radius": 12,
     "padding": 24,
-    "icon_size": 80,
+    "icon_size": 64,
     "button_min_width": 140,
 }
 
