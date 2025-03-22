@@ -3,9 +3,9 @@
     "command": "node",
     "args": [
       "/Users/richardli/CascadeProjects/MCP/FileAccess/dist/index.js",
-      "~/Documents",
-      "~/Downloads",
-      "~/Desktop"
+      "/Users/richardli/Documents",
+      "/Users/richardli/Downloads",
+      "/Users/richardli/Desktop"
     ],
     "env": {}
   }
