@@ -522,11 +522,10 @@ class AppStorePage(QWidget):
             self.parent_window.deleted_mcps.discard(mcp_name)
             self.parent_window.save_deleted_mcps()
             
-            # Add the MCP to the servers dictionary
+            # Add the MCP to the servers dictionary and installed list
             self.parent_window.servers[mcp_name] = mcp_info
-            
-            # Enable the MCP
-            self.parent_window.enable_server(mcp_name)
+            self.parent_window.installed_mcps.add(mcp_name)
+            self.parent_window.save_installed_mcps()
             
             # Update both the app store and main window
             self.parent_window.update_app_store()
@@ -534,8 +533,8 @@ class AppStorePage(QWidget):
             
             # Show success message
             QMessageBox.information(self, "Success", 
-                                  f"MCP '{mcp_name}' has been installed and enabled!\n"
-                                  f"Please restart your applications for changes to take effect.")
+                                  f"MCP '{mcp_name}' has been installed!\n"
+                                  f"You can now enable it from the main window.")
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to install MCP: {str(e)}")
@@ -551,6 +550,7 @@ class MCPServerManager(QMainWindow):
         self.enabled_servers = set()
         self.env_vars = {}
         self.deleted_mcps = set()
+        self.installed_mcps = set()  # Track installed MCPs
         
         # Initialize the main widget and layout
         main_widget = QWidget()
@@ -769,14 +769,16 @@ class MCPServerManager(QMainWindow):
                     except:
                         pass
             
-            # Remove from enabled servers and servers dictionary
+            # Remove from enabled servers, installed MCPs, and servers dictionary
             self.enabled_servers.discard(server_name)
+            self.installed_mcps.discard(server_name)
             if server_name in self.servers:
                 del self.servers[server_name]
             
             # Add to deleted MCPs list
             self.deleted_mcps.add(server_name)
             self.save_deleted_mcps()
+            self.save_installed_mcps()
             
             # Update both main window and app store
             self.populate_server_grid()
@@ -938,6 +940,7 @@ class MCPServerManager(QMainWindow):
     def load_all_data(self):
         """Load all data needed for the UI"""
         self.load_deleted_mcps()
+        self.load_installed_mcps()  # Load installed MCPs before loading servers
         self.load_servers()
         self.load_current_configs()
         self.load_environment_variables()
@@ -959,6 +962,22 @@ class MCPServerManager(QMainWindow):
         os.makedirs(os.path.dirname(config.DELETED_MCPS_PATH), exist_ok=True)
         with open(config.DELETED_MCPS_PATH, 'w') as f:
             json.dump(list(self.deleted_mcps), f, indent=2)
+
+    def load_installed_mcps(self):
+        """Load the list of installed MCPs"""
+        self.installed_mcps = set()
+        if os.path.exists(config.INSTALLED_MCPS_PATH):
+            try:
+                with open(config.INSTALLED_MCPS_PATH, 'r') as f:
+                    self.installed_mcps = set(json.load(f))
+            except:
+                pass
+    
+    def save_installed_mcps(self):
+        """Save the current list of installed MCPs"""
+        os.makedirs(os.path.dirname(config.INSTALLED_MCPS_PATH), exist_ok=True)
+        with open(config.INSTALLED_MCPS_PATH, 'w') as f:
+            json.dump(list(self.installed_mcps), f, indent=2)
 
     def load_servers(self):
         """Load all installed MCPs"""
@@ -994,10 +1013,14 @@ class MCPServerManager(QMainWindow):
                 with open(config_path, 'r') as f:
                     server_config = json.load(f)
                     
-                # Store server info with its path
+                # Load servers that are either installed or enabled
                 for server_name, server_data in server_config.items():
                     # Skip deleted MCPs
                     if server_name in self.deleted_mcps:
+                        continue
+                        
+                    # Only load if installed or enabled
+                    if server_name not in self.installed_mcps and server_name not in enabled_servers:
                         continue
                         
                     # Update the command path if it's relative
@@ -1068,6 +1091,9 @@ class MCPServerManager(QMainWindow):
     def sync_application_configs(self):
         """Ensure all application configs are in sync with enabled servers"""
         try:
+            # Track which applications had config changes
+            apps_with_changes = set()
+            
             # Get all currently enabled servers from all applications
             all_enabled_servers = set()
             for app_id, app_config in config.APPLICATIONS.items():
@@ -1093,6 +1119,7 @@ class MCPServerManager(QMainWindow):
                                     del app_data[app_config["config_key"]][server_name]
                                     with open(app_config["config_path"], 'w') as f:
                                         json.dump(app_data, f, indent=2)
+                                    apps_with_changes.add(app_config["name"])
                         except:
                             continue
                 else:
@@ -1106,25 +1133,53 @@ class MCPServerManager(QMainWindow):
                                 if app_config["config_key"] not in app_data:
                                     app_data[app_config["config_key"]] = {}
                                 
-                                # Preserve environment variables if they exist
-                                if server_name in app_data[app_config["config_key"]]:
-                                    env_vars = app_data[app_config["config_key"]][server_name].get("env", {})
-                                    server_data_with_env = server_data.copy()
-                                    server_data_with_env["env"] = env_vars
-                                    app_data[app_config["config_key"]][server_name] = server_data_with_env
+                                # Check if config needs updating
+                                needs_update = False
+                                if server_name not in app_data[app_config["config_key"]]:
+                                    needs_update = True
                                 else:
-                                    app_data[app_config["config_key"]][server_name] = server_data
+                                    current_config = app_data[app_config["config_key"]][server_name]
+                                    # Compare configs excluding env vars
+                                    current_without_env = current_config.copy()
+                                    current_without_env.pop("env", None)
+                                    server_without_env = server_data.copy()
+                                    server_without_env.pop("env", None)
+                                    if current_without_env != server_without_env:
+                                        needs_update = True
                                 
-                                with open(app_config["config_path"], 'w') as f:
-                                    json.dump(app_data, f, indent=2)
+                                if needs_update:
+                                    # Preserve environment variables if they exist
+                                    env_vars = app_data[app_config["config_key"]].get(server_name, {}).get("env", {})
+                                    server_data_with_env = server_data.copy()
+                                    if env_vars:
+                                        server_data_with_env["env"] = env_vars
+                                    app_data[app_config["config_key"]][server_name] = server_data_with_env
+                                    with open(app_config["config_path"], 'w') as f:
+                                        json.dump(app_data, f, indent=2)
+                                    apps_with_changes.add(app_config["name"])
                         except:
                             continue
 
             # Update our enabled servers set to match the actual state
             self.enabled_servers = all_enabled_servers.intersection(self.servers.keys())
             
+            # If there were any changes, notify the user
+            if apps_with_changes:
+                apps_list = ", ".join(sorted(apps_with_changes))
+                QMessageBox.information(
+                    self,
+                    "Configuration Changes",
+                    f"MCP configurations have been updated for: {apps_list}\n\n"
+                    f"Please restart these applications for the changes to take effect."
+                )
+            
         except Exception as e:
             print(f"Error syncing application configs: {e}")
+            QMessageBox.warning(
+                self,
+                "Sync Error",
+                f"An error occurred while syncing configurations: {str(e)}"
+            )
 
 def main():
     app = QApplication(sys.argv)

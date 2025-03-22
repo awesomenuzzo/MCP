@@ -44,4 +44,14 @@
 **/*.dylib
 **/*.dll
 
-NWS/config.json
+# Application configs
+
+# MCP Server Manager configs and data
+**/.mcp_servers/
+**/env_vars.json
+**/deleted_mcps.json
+**/installed_mcps.json
+
+# OS-specific
+.DS_Store
+Thumbs.db
