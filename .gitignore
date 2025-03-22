@@ -44,6 +44,15 @@
 **/*.dylib
 **/*.dll
 
+# Node
+**/.node_modules/
+**/node_modules/
+**/.npm/
+**/.yarn/
+**/.pnp.js
+**/.pnp.js.map
+**/.pnp.js.map
+
 # Application configs
 
 # MCP Server Manager configs and data
