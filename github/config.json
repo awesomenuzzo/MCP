@@ -1,0 +1,11 @@
+{
+  "github": {
+    "command": "node",
+    "args": [
+      "/Users/richardli/CascadeProjects/MCP/github/dist/index.js"
+    ],
+    "env": {
+      "GITHUB_TOKEN": "Your GitHub personal access token"
+    }
+  }
+}

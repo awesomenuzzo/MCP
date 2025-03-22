@@ -1,12 +1,11 @@
 {
   "FileAccess": {
-    "command": "npx",
+    "command": "node",
     "args": [
-      "-y", 
-      "@modelcontextprotocol/server-filesystem",
-      "~/Documents",
-      "~/Downloads",
-      "~/Desktop"
+      "/Users/richardli/CascadeProjects/MCP/FileAccess/dist/index.js",
+      "/Users/richardli/Documents",
+      "/Users/richardli/Downloads",
+      "/Users/richardli/Desktop"
     ],
     "env": {}
   }

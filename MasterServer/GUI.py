@@ -865,6 +865,13 @@ class MCPServerManager(QMainWindow):
         # Load initial data and start monitoring
         self.load_all_data()
         self.setup_file_monitoring()
+        
+        # Add method to handle notification removal
+        def on_notification_removed(notification):
+            pass
+        
+        # Add the method to the instance
+        self.on_notification_removed = on_notification_removed
     
     def setup_file_monitoring(self):
         """Set up monitoring for all server config files"""
@@ -963,18 +970,19 @@ class MCPServerManager(QMainWindow):
             # Notify user about changes
             if apps_with_changes:
                 apps_list = ", ".join(sorted(apps_with_changes))
-                self.notification_manager.show_notification(
+                QMessageBox.information(
                     self,
-                    f"Server configurations have changed and been synchronized with: {apps_list}\n\n"
+                    "MCP Configuration Updated",
+                    f"MCP configurations have been updated for: {apps_list}\n"
                     f"Please restart these applications for the changes to take effect."
                 )
                 
         except Exception as e:
             print(f"Error processing config changes: {e}")
-            self.notification_manager.show_notification(
+            QMessageBox.warning(
                 self,
-                f"An error occurred while processing configuration changes: {str(e)}",
-                duration=5000
+                "Error",
+                f"Error syncing configurations: {str(e)}",
             )
     
     def setup_home_page(self):
@@ -1148,17 +1156,18 @@ class MCPServerManager(QMainWindow):
             
             # Show success message
             app_names = [app["name"] for app in config.APPLICATIONS.values()]
-            self.notification_manager.show_notification(
+            QMessageBox.information(
                 self,
+                "MCP Removed",
                 f"MCP '{server_name}' has been removed!\n"
                 f"Please restart {', '.join(app_names)} for changes to take effect."
             )
             
         except Exception as e:
-            self.notification_manager.show_notification(
+            QMessageBox.warning(
                 self,
+                "Error",
                 f"Failed to remove MCP: {str(e)}",
-                duration=5000
             )
 
     def populate_server_grid(self):
@@ -1225,17 +1234,18 @@ class MCPServerManager(QMainWindow):
             self.refresh_server_states()
             
             app_names = [app["name"] for app in config.APPLICATIONS.values()]
-            self.notification_manager.show_notification(
+            QMessageBox.information(
                 self,
+                "Server Disabled",
                 f"Server '{server_name}' has been disabled!\n"
                 f"Please restart {', '.join(app_names)} for changes to take effect."
             )
             
         except Exception as e:
-            self.notification_manager.show_notification(
+            QMessageBox.warning(
                 self,
+                "Error",
                 f"Failed to disable server: {str(e)}",
-                duration=5000
             )
     
     def enable_server(self, server_name):
@@ -1300,17 +1310,18 @@ class MCPServerManager(QMainWindow):
             self.refresh_server_states()
                 
             app_names = [app["name"] for app in config.APPLICATIONS.values()]
-            self.notification_manager.show_notification(
+            QMessageBox.information(
                 self,
+                "Server Enabled",
                 f"Server '{server_name}' has been enabled!\n"
                 f"Please restart {', '.join(app_names)} for changes to take effect."
             )
             
         except Exception as e:
-            self.notification_manager.show_notification(
+            QMessageBox.warning(
                 self,
+                "Error",
                 f"Failed to save configuration: {str(e)}",
-                duration=5000
             )
     
     def refresh_server_states(self):
@@ -1555,18 +1566,19 @@ class MCPServerManager(QMainWindow):
             # If there were any changes, notify the user
             if apps_with_changes:
                 apps_list = ", ".join(sorted(apps_with_changes))
-                self.notification_manager.show_notification(
+                QMessageBox.information(
                     self,
+                    "MCP Configuration Updated",
                     f"MCP configurations have been updated for: {apps_list}\n"
                     f"Please restart these applications for the changes to take effect."
                 )
             
         except Exception as e:
             print(f"Error syncing application configs: {e}")
-            self.notification_manager.show_notification(
+            QMessageBox.warning(
                 self,
+                "Error",
                 f"Error syncing configurations: {str(e)}",
-                duration=5000
             )
 
 def main():
