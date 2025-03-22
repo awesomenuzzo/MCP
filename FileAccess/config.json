@@ -2,10 +2,10 @@
   "FileAccess": {
     "command": "node",
     "args": [
-      "/Users/richardli/CascadeProjects/MCP/FileAccess/dist/index.js",
-      "/Users/richardli/Documents",
-      "/Users/richardli/Downloads",
-      "/Users/richardli/Desktop"
+      "/Users/awesomenuzzo/Documents/Projects/SVHub/MCPServers/FileAccess/dist/index.js",
+      "/Users/awesomenuzzo/Documents",
+      "/Users/awesomenuzzo/Downloads",
+      "/Users/awesomenuzzo/Desktop"
     ],
     "env": {}
   }

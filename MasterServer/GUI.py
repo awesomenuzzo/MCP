@@ -631,12 +631,18 @@ class AppStorePage(QWidget):
             self.parent_window.populate_server_grid()
             
             # Show success message
-            QMessageBox.information(self, "Success", 
-                                  f"MCP '{mcp_name}' has been installed!\n"
-                                  f"You can now enable it from the main window.")
+            self.parent_window.notification_manager.show_notification(
+                self.parent_window,
+                f"MCP '{mcp_name}' has been installed!\n"
+                f"You can now enable it from the main window."
+            )
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to install MCP: {str(e)}")
+            self.parent_window.notification_manager.show_notification(
+                self.parent_window,
+                f"Failed to install MCP: {str(e)}",
+                duration=5000
+            )
 
 class ToastNotification(QFrame):
     def __init__(self, parent=None, message="", duration=3000):
@@ -919,8 +925,30 @@ class MCPServerManager(QMainWindow):
                     server_name = os.path.basename(server_dir)
                     
                     # Load the updated server config
-                    with open(path, 'r') as f:
-                        server_config = json.load(f)
+                    try:
+                        with open(path, 'r') as f:
+                            server_config = json.load(f)
+                    except json.JSONDecodeError as je:
+                        # Get the line content where the error occurred
+                        with open(path, 'r') as f:
+                            lines = f.readlines()
+                            error_line = lines[je.lineno - 1] if je.lineno <= len(lines) else ""
+                            
+                        self.notification_manager.show_notification(
+                            self,
+                            f"Invalid JSON in config file for {server_name}:\n"
+                            f"Line {je.lineno}: {error_line.strip()}\n"
+                            f"Error: {str(je)}",
+                            duration=5000
+                        )
+                        continue
+                    except Exception as e:
+                        self.notification_manager.show_notification(
+                            self,
+                            f"Failed to read config file for {server_name}:\n{str(e)}",
+                            duration=5000
+                        )
+                        continue
                     
                     # Update the server in our servers dictionary
                     if server_name in self.servers:
@@ -954,11 +982,20 @@ class MCPServerManager(QMainWindow):
                                             with open(app_config["config_path"], 'w') as f:
                                                 json.dump(app_data, f, indent=2)
                                             apps_with_changes.add(app_config["name"])
-                                except:
+                                except Exception as e:
+                                    self.notification_manager.show_notification(
+                                        self,
+                                        f"Failed to update config for {app_config['name']}:\n{str(e)}",
+                                        duration=5000
+                                    )
                                     continue
                     
                 except Exception as e:
-                    print(f"Error processing server config change for {path}: {e}")
+                    self.notification_manager.show_notification(
+                        self,
+                        f"Error processing config change for {os.path.basename(path)}:\n{str(e)}",
+                        duration=5000
+                    )
                     continue
             
             # Clear pending changes
@@ -970,19 +1007,17 @@ class MCPServerManager(QMainWindow):
             # Notify user about changes
             if apps_with_changes:
                 apps_list = ", ".join(sorted(apps_with_changes))
-                QMessageBox.information(
+                self.notification_manager.show_notification(
                     self,
-                    "MCP Configuration Updated",
-                    f"MCP configurations have been updated for: {apps_list}\n"
+                    f"Server configurations have been updated for: {apps_list}\n"
                     f"Please restart these applications for the changes to take effect."
                 )
                 
         except Exception as e:
-            print(f"Error processing config changes: {e}")
-            QMessageBox.warning(
+            self.notification_manager.show_notification(
                 self,
-                "Error",
-                f"Error syncing configurations: {str(e)}",
+                f"Error syncing configurations:\n{str(e)}",
+                duration=5000
             )
     
     def setup_home_page(self):
@@ -1156,18 +1191,17 @@ class MCPServerManager(QMainWindow):
             
             # Show success message
             app_names = [app["name"] for app in config.APPLICATIONS.values()]
-            QMessageBox.information(
+            self.notification_manager.show_notification(
                 self,
-                "MCP Removed",
                 f"MCP '{server_name}' has been removed!\n"
                 f"Please restart {', '.join(app_names)} for changes to take effect."
             )
             
         except Exception as e:
-            QMessageBox.warning(
+            self.notification_manager.show_notification(
                 self,
-                "Error",
                 f"Failed to remove MCP: {str(e)}",
+                duration=5000
             )
 
     def populate_server_grid(self):
@@ -1234,18 +1268,17 @@ class MCPServerManager(QMainWindow):
             self.refresh_server_states()
             
             app_names = [app["name"] for app in config.APPLICATIONS.values()]
-            QMessageBox.information(
+            self.notification_manager.show_notification(
                 self,
-                "Server Disabled",
                 f"Server '{server_name}' has been disabled!\n"
                 f"Please restart {', '.join(app_names)} for changes to take effect."
             )
             
         except Exception as e:
-            QMessageBox.warning(
+            self.notification_manager.show_notification(
                 self,
-                "Error",
                 f"Failed to disable server: {str(e)}",
+                duration=5000
             )
     
     def enable_server(self, server_name):
@@ -1310,18 +1343,17 @@ class MCPServerManager(QMainWindow):
             self.refresh_server_states()
                 
             app_names = [app["name"] for app in config.APPLICATIONS.values()]
-            QMessageBox.information(
+            self.notification_manager.show_notification(
                 self,
-                "Server Enabled",
                 f"Server '{server_name}' has been enabled!\n"
                 f"Please restart {', '.join(app_names)} for changes to take effect."
             )
             
         except Exception as e:
-            QMessageBox.warning(
+            self.notification_manager.show_notification(
                 self,
-                "Error",
                 f"Failed to save configuration: {str(e)}",
+                duration=5000
             )
     
     def refresh_server_states(self):
@@ -1566,19 +1598,18 @@ class MCPServerManager(QMainWindow):
             # If there were any changes, notify the user
             if apps_with_changes:
                 apps_list = ", ".join(sorted(apps_with_changes))
-                QMessageBox.information(
+                self.notification_manager.show_notification(
                     self,
-                    "MCP Configuration Updated",
                     f"MCP configurations have been updated for: {apps_list}\n"
                     f"Please restart these applications for the changes to take effect."
                 )
             
         except Exception as e:
             print(f"Error syncing application configs: {e}")
-            QMessageBox.warning(
+            self.notification_manager.show_notification(
                 self,
-                "Error",
                 f"Error syncing configurations: {str(e)}",
+                duration=5000
             )
 
 def main():
