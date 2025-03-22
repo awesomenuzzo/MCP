@@ -1,5 +1,5 @@
 {
-  "todoist": {
+  "Todoist": {
     "command": "npx",
     "args": ["-y", "@abhiz123/todoist-mcp-server"],
     "env": {

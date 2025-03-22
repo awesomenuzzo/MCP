@@ -6,6 +6,7 @@ CLAUDE_CONFIG_PATH = os.path.join(HOME_DIR, "Library/Application Support/Claude/
 CURSOR_CONFIG_PATH = os.path.join(HOME_DIR, ".cursor/mcp.json")
 ENV_VARS_PATH = os.path.join(HOME_DIR, ".mcp_servers/env_vars.json")
 WINDSURF_CONFIG_PATH = os.path.join(HOME_DIR, ".codeium/windsurf/mcp_config.json")
+DELETED_MCPS_PATH = os.path.join(HOME_DIR, ".mcp_servers/deleted_mcps.json")
 
 # Application Configurations
 APPLICATIONS = {
