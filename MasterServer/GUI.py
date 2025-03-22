@@ -725,11 +725,11 @@ class NotificationManager:
         self.spacing = 10
     
     def show_notification(self, parent, message, duration=3000):
+        # Clean up any deleted notifications first
+        self.cleanup_notifications()
+        
         # Create new notification
         notification = ToastNotification(parent, message, duration)
-        
-        # Remove any deleted notifications from the list
-        self.notifications = [n for n in self.notifications if n and not n.isHidden()]
         
         # Calculate position (top right with margin)
         x = parent.width() - notification.width() - self.margin
@@ -746,20 +746,37 @@ class NotificationManager:
         # Add to notifications list
         self.notifications.append(notification)
     
+    def cleanup_notifications(self):
+        """Remove any deleted or hidden notifications from the list"""
+        # Create a new list with only valid notifications
+        valid_notifications = []
+        for notification in self.notifications:
+            try:
+                if notification and not notification.isHidden():
+                    valid_notifications.append(notification)
+            except RuntimeError:
+                # Skip if the C++ object has been deleted
+                continue
+        self.notifications = valid_notifications
+    
     def on_notification_removed(self, notification):
         """Called when a notification is about to be removed"""
-        if notification in self.notifications:
-            self.notifications.remove(notification)
+        try:
+            if notification in self.notifications:
+                self.notifications.remove(notification)
             
-        # Reposition remaining notifications
-        if not self.notifications:
-            return
-            
-        y = self.margin
-        for n in self.notifications:
-            if n and not n.isHidden():
-                n.move(n.x(), y)
-                y += n.height() + self.spacing
+            # Reposition remaining notifications
+            if not self.notifications:
+                return
+                
+            y = self.margin
+            for n in self.notifications:
+                if n and not n.isHidden():
+                    n.move(n.x(), y)
+                    y += n.height() + self.spacing
+        except RuntimeError:
+            # If we get here, just clean up all notifications
+            self.cleanup_notifications()
 
 class MCPServerManager(QMainWindow):
     def __init__(self):
@@ -953,35 +970,51 @@ class MCPServerManager(QMainWindow):
                     # Update the server in our servers dictionary
                     if server_name in self.servers:
                         # Update the config while preserving the path
+                        server_path = self.servers[server_name]["path"]
+                        
+                        # Update any relative paths in args
+                        if "args" in server_config:
+                            for i, arg in enumerate(server_config["args"]):
+                                if isinstance(arg, str) and arg.startswith("./"):
+                                    server_config["args"][i] = os.path.join(server_path, arg[2:])
+                        
                         self.servers[server_name]["config"] = server_config
                         
                         # If this server is enabled, update all application configs
                         if server_name in self.enabled_servers:
                             for app_id, app_config in config.APPLICATIONS.items():
                                 try:
-                                    with open(app_config["config_path"], 'r') as f:
-                                        app_data = json.load(f)
-                                        if app_config["config_key"] in app_data and server_name in app_data[app_config["config_key"]]:
-                                            # Get the current server config from the app
-                                            current_app_config = app_data[app_config["config_key"]][server_name]
-                                            
-                                            # Create a new config that preserves required fields
-                                            new_config = {
-                                                "command": current_app_config.get("command", server_config.get("command", "")),
-                                                "args": server_config.get("args", []),
-                                                "env": current_app_config.get("env", {})
-                                            }
-                                            
-                                            # Update any other fields from the server config
-                                            for key, value in server_config.items():
-                                                if key not in ["command", "args", "env"]:
-                                                    new_config[key] = value
-                                            
-                                            # Update the server config in the app
-                                            app_data[app_config["config_key"]][server_name] = new_config
-                                            with open(app_config["config_path"], 'w') as f:
-                                                json.dump(app_data, f, indent=2)
-                                            apps_with_changes.add(app_config["name"])
+                                    # Ensure config directory exists
+                                    os.makedirs(os.path.dirname(app_config["config_path"]), exist_ok=True)
+                                    
+                                    # Load existing config or create new one
+                                    app_data = {}
+                                    if os.path.exists(app_config["config_path"]):
+                                        with open(app_config["config_path"], 'r') as f:
+                                            app_data = json.load(f)
+                                    
+                                    # Initialize config key if it doesn't exist
+                                    if app_config["config_key"] not in app_data:
+                                        app_data[app_config["config_key"]] = {}
+                                    
+                                    # Get current config to preserve env vars
+                                    current_config = app_data[app_config["config_key"]].get(server_name, {})
+                                    env_vars = current_config.get("env", {})
+                                    
+                                    # Create new config with updated values but preserved env vars
+                                    new_config = server_config.copy()
+                                    if env_vars:
+                                        new_config["env"] = env_vars
+                                    
+                                    # Update the config
+                                    app_data[app_config["config_key"]][server_name] = new_config
+                                    
+                                    # Save the updated config
+                                    with open(app_config["config_path"], 'w') as f:
+                                        json.dump(app_data, f, indent=2)
+                                    
+                                    apps_with_changes.add(app_config["name"])
+                                    
                                 except Exception as e:
                                     self.notification_manager.show_notification(
                                         self,
