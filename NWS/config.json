@@ -3,7 +3,7 @@
         "command": "uv",
         "args": [
             "--directory",
-            "/Users/awesomenuzzo/Documents/Projects/MCPServers/NWS",
+            "./",
             "run",
             "server.py"
         ]
