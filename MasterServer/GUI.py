@@ -6,8 +6,8 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QMessageBox, QGridLayout, QFrame, QScrollArea,
                             QGraphicsDropShadowEffect, QDialog, QLineEdit,
                             QFormLayout, QDialogButtonBox, QStackedWidget,
-                            QMenu)
-from PyQt6.QtCore import Qt, QPoint, QRect
+                            QMenu, QSizePolicy)
+from PyQt6.QtCore import Qt, QPoint, QRect, QFileSystemWatcher, QTimer
 from PyQt6.QtGui import QIcon, QPixmap, QColor, QPainter, QLinearGradient, QFont, QGradient
 import config
 
@@ -154,6 +154,12 @@ class ServerCard(QFrame):
         self.setFrameStyle(QFrame.Shape.NoFrame)
         self.setGraphicsEffect(None)  # Explicitly remove any graphics effects
         
+        # Set size policy to expand horizontally and vertically
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
+        # Set minimum width to ensure cards don't get too small
+        self.setMinimumWidth(500)
+        
         self.setStyleSheet(f"""
             ServerCard {{
                 background: {config.COLORS["card_background"]};
@@ -177,12 +183,11 @@ class ServerCard(QFrame):
             }}
             QPushButton {{
                 border: none;
-                padding: 8px 24px;
+                padding: 8px 16px;
                 border-radius: 6px;
                 color: white;
                 font-size: 14px;
                 font-weight: 500;
-                min-width: {config.CARD_STYLES["button_min_width"]}px;
                 background-color: transparent;
             }}
             QPushButton#enableButton {{
@@ -321,6 +326,7 @@ class ServerCard(QFrame):
         
         # Content container (middle)
         content_container = QWidget()
+        content_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         content_layout = QVBoxLayout(content_container)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(8)
@@ -358,10 +364,11 @@ class ServerCard(QFrame):
         content_layout.addWidget(desc_label)
         
         # Add content container to main layout with stretch
-        layout.addWidget(content_container, stretch=1)
+        layout.addWidget(content_container, 1)  # Takes up available space
         
         # Button container (right side)
         button_container = QWidget()
+        button_container.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
         button_layout = QHBoxLayout(button_container)
         button_layout.setContentsMargins(0, 0, 0, 0)
         button_layout.setSpacing(8)
@@ -369,23 +376,27 @@ class ServerCard(QFrame):
         
         # Button and menu container
         button_menu_container = QWidget()
+        button_menu_container.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
         button_menu_layout = QHBoxLayout(button_menu_container)
         button_menu_layout.setContentsMargins(0, 0, 0, 0)
         button_menu_layout.setSpacing(4)
         
         # Enable/Disable buttons container
         toggle_button_container = QWidget()
+        toggle_button_container.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
         toggle_button_layout = QVBoxLayout(toggle_button_container)
         toggle_button_layout.setContentsMargins(0, 0, 0, 0)
         toggle_button_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         
         # Enable button
         self.enable_button = QPushButton("Enable Server")
+        self.enable_button.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.enable_button.setObjectName("enableButton")
         toggle_button_layout.addWidget(self.enable_button)
         
         # Disable button
         self.disable_button = QPushButton("Disable Server")
+        self.disable_button.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.disable_button.setObjectName("disableButton")
         toggle_button_layout.addWidget(self.disable_button)
         
@@ -405,8 +416,10 @@ class ServerCard(QFrame):
         
         button_layout.addWidget(button_menu_container)
         
-        # Add button container to main layout
-        layout.addWidget(button_container)
+        # Add containers to main layout with appropriate stretches
+        layout.addWidget(icon_container, 0)  # No stretch
+        layout.addWidget(content_container, 1)  # Takes up available space
+        layout.addWidget(button_container, 0)  # No stretch
         
         # Update button visibility based on enabled state
         self.update_button_state(is_enabled)
@@ -552,17 +565,79 @@ class MCPServerManager(QMainWindow):
         self.deleted_mcps = set()
         self.installed_mcps = set()  # Track installed MCPs
         
+        # Initialize file watcher
+        self.file_watcher = QFileSystemWatcher(self)
+        self.file_watcher.fileChanged.connect(self.handle_config_change)
+        self.config_update_timer = QTimer(self)
+        self.config_update_timer.setSingleShot(True)
+        self.config_update_timer.timeout.connect(self.process_config_changes)
+        self.pending_changes = set()
+        
         # Initialize the main widget and layout
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
-        main_layout = QVBoxLayout(main_widget)
+        main_layout = QHBoxLayout(main_widget)  # Changed to QHBoxLayout for sidebar
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
+        
+        # Create sidebar
+        sidebar = QWidget()
+        sidebar.setFixedWidth(48)  # Narrow sidebar
+        sidebar.setStyleSheet(f"""
+            QWidget {{
+                background-color: {config.COLORS["card_background"]};
+                border-right: 1px solid {config.COLORS["border"]};
+            }}
+        """)
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(0, 16, 0, 0)  # Only top margin
+        sidebar_layout.setSpacing(0)
+        sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)  # Top center alignment
+        
+        # Add button in sidebar
+        self.add_button = QPushButton("+")
+        self.add_button.setFixedSize(32, 32)
+        self.add_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {config.COLORS["text_primary"]};
+                border: none;
+                border-radius: 16px;
+                font-size: 20px;
+                font-weight: normal;
+                padding: 0;
+                text-align: center;
+                line-height: 30px;  /* Slightly reduced to account for font metrics */
+                margin: 0;
+                vertical-align: middle;
+            }}
+            QPushButton:hover {{
+                background-color: {config.COLORS["border"]};
+            }}
+            QPushButton:pressed {{
+                margin-top: 2px;
+                margin-bottom: -2px;
+            }}
+        """)
+        self.add_button.clicked.connect(self.show_app_store)
+        sidebar_layout.addWidget(self.add_button)
+        
+        # Add sidebar to main layout
+        main_layout.addWidget(sidebar)
+        
+        # Create content container
+        content_container = QWidget()
+        content_layout = QVBoxLayout(content_container)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
         
         # Create home page
         self.home_page = QWidget()
         self.setup_home_page()
-        main_layout.addWidget(self.home_page)
+        content_layout.addWidget(self.home_page)
+        
+        # Add content container to main layout
+        main_layout.addWidget(content_container)
         
         # Create app store window (but don't show it yet)
         self.app_store_window = None
@@ -574,74 +649,74 @@ class MCPServerManager(QMainWindow):
             }}
         """)
         
-        # Add floating button after everything else is set up
-        self.setup_floating_button()
-        
-        # Load initial data
+        # Load initial data and start monitoring
         self.load_all_data()
+        self.setup_file_monitoring()
     
-    def setup_floating_button(self):
-        """Set up the floating add button in the bottom right corner"""
-        # Floating add button
-        self.add_button = QPushButton("+")
-        self.add_button.setFixedSize(56, 56)
-        self.add_button.setGraphicsEffect(None)  # Explicitly remove any shadow effect
-        self.add_button.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)  # Make background truly transparent
-        self.add_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: #000000;
-                border: none;
-                border-radius: 28px;  /* Half of width/height for perfect circle */
-                font-size: 24px;  /* Reduced font size for better centering */
-                font-weight: normal;  /* Normal weight for cleaner look */
-                margin: 16px;
-                text-align: center;
-                padding: 0px;  /* Remove padding to ensure perfect circle */
-                line-height: 52px;  /* Center the plus sign vertically */
-            }}
-            QPushButton:hover {{
-                background-color: rgba(0, 0, 0, 0.05);
-            }}
-            QPushButton:pressed {{
-                background-color: rgba(0, 0, 0, 0.1);
-                margin-top: 18px;
-                margin-bottom: 14px;
-            }}
-        """)
-        self.add_button.clicked.connect(self.show_app_store)
-        
-        # Create a container for the add button that stays on top
-        self.button_container = QWidget(self)
-        self.button_container.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
-        self.button_container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)  # Make background truly transparent
-        self.button_container.setGraphicsEffect(None)  # Ensure no shadow on container
-        self.button_container.setFixedSize(88, 88)
-        self.button_container.setStyleSheet("background: transparent;")
-        
-        button_layout = QVBoxLayout(self.button_container)
-        button_layout.addWidget(self.add_button)
-        button_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Ensure the button container stays on top
-        self.button_container.raise_()
-        
-        # Initial position
-        self.update_button_position()
+    def setup_file_monitoring(self):
+        """Set up monitoring for all relevant config files"""
+        # Add all application config files to the watcher
+        for app_config in config.APPLICATIONS.values():
+            config_path = app_config["config_path"]
+            if os.path.exists(config_path):
+                self.file_watcher.addPath(config_path)
+            # Create parent directory if it doesn't exist
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
     
-    def update_button_position(self):
-        """Update the floating button position"""
-        if hasattr(self, 'button_container'):
-            self.button_container.move(
-                self.width() - self.button_container.width(),
-                self.height() - self.button_container.height()
+    def handle_config_change(self, path):
+        """Handle a config file change event"""
+        # Add the changed file to pending changes
+        self.pending_changes.add(path)
+        
+        # Restart the timer to process changes
+        self.config_update_timer.start(1000)  # Wait 1 second before processing changes
+        
+        # Re-add the file to the watcher (some systems remove it after a change)
+        if os.path.exists(path):
+            self.file_watcher.addPath(path)
+    
+    def process_config_changes(self):
+        """Process all pending config changes"""
+        if not self.pending_changes:
+            return
+            
+        try:
+            # Track which applications had changes
+            apps_with_changes = set()
+            
+            # Process each changed file
+            for path in self.pending_changes:
+                for app_id, app_config in config.APPLICATIONS.items():
+                    if app_config["config_path"] == path:
+                        apps_with_changes.add(app_config["name"])
+                        break
+            
+            # Clear pending changes
+            self.pending_changes.clear()
+            
+            # Reload and sync configurations
+            self.load_current_configs()
+            self.sync_application_configs()
+            self.populate_server_grid()
+            
+            # Notify user about changes
+            if apps_with_changes:
+                apps_list = ", ".join(sorted(apps_with_changes))
+                QMessageBox.information(
+                    self,
+                    "Configuration Changes Detected",
+                    f"MCP configurations have changed for: {apps_list}\n\n"
+                    f"The changes have been automatically synchronized.\n"
+                    f"Please restart these applications for the changes to take effect."
+                )
+                
+        except Exception as e:
+            print(f"Error processing config changes: {e}")
+            QMessageBox.warning(
+                self,
+                "Sync Error",
+                f"An error occurred while processing configuration changes: {str(e)}"
             )
-            self.button_container.raise_()
-    
-    def resizeEvent(self, event):
-        """Handle window resize events"""
-        super().resizeEvent(event)
-        self.update_button_position()
     
     def setup_home_page(self):
         layout = QVBoxLayout(self.home_page)
@@ -673,10 +748,9 @@ class MCPServerManager(QMainWindow):
         """)
         
         scroll_content = QWidget()
-        self.grid_layout = QVBoxLayout(scroll_content)
+        self.grid_layout = QGridLayout(scroll_content)
         self.grid_layout.setSpacing(16)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         scroll.setWidget(scroll_content)
         layout.addWidget(scroll)
         
@@ -805,8 +879,21 @@ class MCPServerManager(QMainWindow):
                 widget.setParent(None)
                 widget.deleteLater()
         
-        # Add cards in a single column
-        for server_name, server_info in sorted(self.servers.items()):
+        # Calculate number of columns based on window width
+        window_width = self.width()
+        if window_width >= 1500:  # Very wide window - 3 columns
+            num_columns = 3
+        elif window_width >= 1000:  # Medium window - 2 columns
+            num_columns = 2
+        else:  # Narrow window - 1 column
+            num_columns = 1
+        
+        # Add cards in a grid
+        sorted_servers = sorted(self.servers.items())
+        for idx, (server_name, server_info) in enumerate(sorted_servers):
+            row = idx // num_columns
+            col = idx % num_columns
+            
             is_enabled = server_name in self.enabled_servers
             card = ServerCard(server_name, server_info["config"], server_info["path"], is_enabled)
             card.enable_button.clicked.connect(lambda checked, name=server_name: self.enable_server(name))
@@ -818,13 +905,7 @@ class MCPServerManager(QMainWindow):
             delete_action.triggered.connect(lambda checked, name=server_name: self.delete_mcp(name))
             card.menu_button.clicked.connect(lambda checked, m=menu, b=card.menu_button: m.exec(b.mapToGlobal(b.rect().bottomLeft())))
             
-            self.grid_layout.addWidget(card)
-            
-            # Add a small spacer after each card except the last one
-            if server_name != list(self.servers.keys())[-1]:
-                spacer = QWidget()
-                spacer.setFixedHeight(1)
-                self.grid_layout.addWidget(spacer)
+            self.grid_layout.addWidget(card, row, col)
         
         # Show/hide empty state message
         self.empty_state.setVisible(len(self.servers) == 0)

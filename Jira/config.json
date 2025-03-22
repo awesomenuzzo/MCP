@@ -1,6 +1,6 @@
 {
   "Jira": {
-    "command": "uvx",
+    "command": "/Users/awesomenuzzo/.pyenv/shims/uvx",
     "args": ["mcp-atlassian"],
     "env": {
       "JIRA_URL": "Insert your Jira URL here (e.g., https://your-domain.atlassian.net)",

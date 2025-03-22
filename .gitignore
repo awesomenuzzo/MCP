@@ -54,6 +54,8 @@
 **/.pnp.js.map
 
 # Application configs
+Jira/config.json
+
 
 # MCP Server Manager configs and data
 **/.mcp_servers/
