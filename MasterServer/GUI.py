@@ -867,12 +867,17 @@ class MCPServerManager(QMainWindow):
         if env_vars:
             # Get existing values or defaults
             existing_vars = self.env_vars.get(server_name, {})
+            
+            # Only include variables that are actually defined in the server's config.json
+            filtered_vars = {}
             for var_name in env_vars:
                 if var_name not in existing_vars:
-                    existing_vars[var_name] = env_vars[var_name]
+                    filtered_vars[var_name] = env_vars[var_name]
+                else:
+                    filtered_vars[var_name] = existing_vars[var_name]
             
             # Show dialog for environment variables
-            dialog = EnvironmentVariablesDialog(server_name, existing_vars, self)
+            dialog = EnvironmentVariablesDialog(server_name, filtered_vars, self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 # Save the environment variables
                 self.env_vars[server_name] = dialog.get_environment_variables()

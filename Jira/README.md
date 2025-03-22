@@ -1,4 +1,4 @@
-# MCP Atlassian
+# Jira Integration
 
 Model Context Protocol (MCP) server for Atlassian products (Confluence and Jira). This integration supports both Atlassian Cloud and Jira Server/Data Center deployments.
 
