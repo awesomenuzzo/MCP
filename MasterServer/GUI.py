@@ -563,10 +563,9 @@ class AppStorePage(QWidget):
         """)
         
         scroll_content = QWidget()
-        self.grid_layout = QVBoxLayout(scroll_content)
+        self.grid_layout = QGridLayout(scroll_content)
         self.grid_layout.setSpacing(16)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         scroll.setWidget(scroll_content)
         layout.addWidget(scroll)
         
@@ -579,8 +578,21 @@ class AppStorePage(QWidget):
                 widget.setParent(None)
                 widget.deleteLater()
         
-        # Add cards for available MCPs
-        for mcp_name, mcp_info in sorted(available_mcps.items()):
+        # Calculate number of columns based on window width
+        window_width = self.parent_window.width() if self.parent_window else 1000
+        if window_width >= 1500:  # Very wide window - 3 columns
+            num_columns = 3
+        elif window_width >= 1000:  # Medium window - 2 columns
+            num_columns = 2
+        else:  # Narrow window - 1 column
+            num_columns = 1
+        
+        # Add cards in a grid
+        sorted_mcps = sorted(available_mcps.items())
+        for idx, (mcp_name, mcp_info) in enumerate(sorted_mcps):
+            row = idx // num_columns
+            col = idx % num_columns
+            
             card = ServerCard(mcp_name, mcp_info["config"], mcp_info["path"], is_enabled=False)
             card.enable_button.setText("Install")
             card.enable_button.setStyleSheet(f"""
@@ -601,13 +613,7 @@ class AppStorePage(QWidget):
             card.disable_button.setVisible(False)
             card.menu_button.setVisible(False)  # Hide menu button in app store
             card.enable_button.clicked.connect(lambda checked, name=mcp_name, info=mcp_info: self.install_mcp(name, info))
-            self.grid_layout.addWidget(card)
-            
-            # Add a small spacer after each card except the last one
-            if mcp_name != list(available_mcps.keys())[-1]:
-                spacer = QWidget()
-                spacer.setFixedHeight(1)
-                self.grid_layout.addWidget(spacer)
+            self.grid_layout.addWidget(card, row, col)
         
         # Force layout update
         self.grid_layout.update()
@@ -804,10 +810,6 @@ class MCPServerManager(QMainWindow):
         # Initialize file watcher
         self.file_watcher = QFileSystemWatcher(self)
         self.file_watcher.fileChanged.connect(self.handle_config_change)
-        self.config_update_timer = QTimer(self)
-        self.config_update_timer.setSingleShot(True)
-        self.config_update_timer.timeout.connect(self.process_config_changes)
-        self.pending_changes = set()
         
         # Initialize the main widget and layout
         main_widget = QWidget()
@@ -915,141 +917,114 @@ class MCPServerManager(QMainWindow):
     
     def handle_config_change(self, path):
         """Handle a config file change event"""
-        # Add the changed file to pending changes
-        self.pending_changes.add(path)
-        
-        # Restart the timer to process changes
-        self.config_update_timer.start(1000)  # Wait 1 second before processing changes
-        
-        # Re-add the file to the watcher (some systems remove it after a change)
-        if os.path.exists(path):
-            self.file_watcher.addPath(path)
-    
-    def process_config_changes(self):
-        """Process all pending server config changes"""
-        if not self.pending_changes:
-            return
-            
         try:
-            # Track which applications need to be updated
-            apps_with_changes = set()
+            # Get the server name from the path
+            server_dir = os.path.dirname(path)
+            server_name = os.path.basename(server_dir)
             
-            # Process each changed server config file
-            for path in self.pending_changes:
-                try:
-                    # Get the server name from the path
-                    server_dir = os.path.dirname(path)
-                    server_name = os.path.basename(server_dir)
+            # Load the updated server config
+            try:
+                with open(path, 'r') as f:
+                    server_config = json.load(f)
+            except json.JSONDecodeError as je:
+                # Get the line content where the error occurred
+                with open(path, 'r') as f:
+                    lines = f.readlines()
+                    error_line = lines[je.lineno - 1] if je.lineno <= len(lines) else ""
                     
-                    # Load the updated server config
-                    try:
-                        with open(path, 'r') as f:
-                            server_config = json.load(f)
-                    except json.JSONDecodeError as je:
-                        # Get the line content where the error occurred
-                        with open(path, 'r') as f:
-                            lines = f.readlines()
-                            error_line = lines[je.lineno - 1] if je.lineno <= len(lines) else ""
-                            
-                        self.notification_manager.show_notification(
-                            self,
-                            f"Invalid JSON in config file for {server_name}:\n"
-                            f"Line {je.lineno}: {error_line.strip()}\n"
-                            f"Error: {str(je)}",
-                            duration=5000
-                        )
-                        continue
-                    except Exception as e:
-                        self.notification_manager.show_notification(
-                            self,
-                            f"Failed to read config file for {server_name}:\n{str(e)}",
-                            duration=5000
-                        )
-                        continue
-                    
-                    # Update the server in our servers dictionary
-                    if server_name in self.servers:
-                        # Update the config while preserving the path
-                        server_path = self.servers[server_name]["path"]
-                        
-                        # Update any relative paths in args
-                        if "args" in server_config:
-                            for i, arg in enumerate(server_config["args"]):
-                                if isinstance(arg, str) and arg.startswith("./"):
-                                    server_config["args"][i] = os.path.join(server_path, arg[2:])
-                        
-                        self.servers[server_name]["config"] = server_config
-                        
-                        # If this server is enabled, update all application configs
-                        if server_name in self.enabled_servers:
-                            for app_id, app_config in config.APPLICATIONS.items():
-                                try:
-                                    # Ensure config directory exists
-                                    os.makedirs(os.path.dirname(app_config["config_path"]), exist_ok=True)
-                                    
-                                    # Load existing config or create new one
-                                    app_data = {}
-                                    if os.path.exists(app_config["config_path"]):
-                                        with open(app_config["config_path"], 'r') as f:
-                                            app_data = json.load(f)
-                                    
-                                    # Initialize config key if it doesn't exist
-                                    if app_config["config_key"] not in app_data:
-                                        app_data[app_config["config_key"]] = {}
-                                    
-                                    # Get current config to preserve env vars
-                                    current_config = app_data[app_config["config_key"]].get(server_name, {})
-                                    env_vars = current_config.get("env", {})
-                                    
-                                    # Create new config with updated values but preserved env vars
-                                    new_config = server_config.copy()
-                                    if env_vars:
-                                        new_config["env"] = env_vars
-                                    
-                                    # Update the config
-                                    app_data[app_config["config_key"]][server_name] = new_config
-                                    
-                                    # Save the updated config
-                                    with open(app_config["config_path"], 'w') as f:
-                                        json.dump(app_data, f, indent=2)
-                                    
-                                    apps_with_changes.add(app_config["name"])
-                                    
-                                except Exception as e:
-                                    self.notification_manager.show_notification(
-                                        self,
-                                        f"Failed to update config for {app_config['name']}:\n{str(e)}",
-                                        duration=5000
-                                    )
-                                    continue
-                    
-                except Exception as e:
-                    self.notification_manager.show_notification(
-                        self,
-                        f"Error processing config change for {os.path.basename(path)}:\n{str(e)}",
-                        duration=5000
-                    )
-                    continue
-            
-            # Clear pending changes
-            self.pending_changes.clear()
-            
-            # Update the UI
-            self.populate_server_grid()
-            
-            # Notify user about changes
-            if apps_with_changes:
-                apps_list = ", ".join(sorted(apps_with_changes))
                 self.notification_manager.show_notification(
                     self,
-                    f"Server configurations have been updated for: {apps_list}\n"
-                    f"Please restart these applications for the changes to take effect."
+                    f"Invalid JSON in config file for {server_name}:\n"
+                    f"Line {je.lineno}: {error_line.strip()}\n"
+                    f"Error: {str(je)}",
+                    duration=5000
                 )
+                return
+            except Exception as e:
+                self.notification_manager.show_notification(
+                    self,
+                    f"Failed to read config file for {server_name}:\n{str(e)}",
+                    duration=5000
+                )
+                return
+            
+            # Update the server in our servers dictionary
+            if server_name in self.servers:
+                # Update the config while preserving the path
+                server_path = self.servers[server_name]["path"]
+                
+                # Update any relative paths in args
+                if "args" in server_config:
+                    for i, arg in enumerate(server_config["args"]):
+                        if isinstance(arg, str) and arg.startswith("./"):
+                            server_config["args"][i] = os.path.join(server_path, arg[2:])
+                
+                self.servers[server_name]["config"] = server_config
+                
+                # If this server is enabled, update all application configs immediately
+                if server_name in self.enabled_servers:
+                    apps_with_changes = set()
+                    for app_id, app_config in config.APPLICATIONS.items():
+                        try:
+                            # Ensure config directory exists
+                            os.makedirs(os.path.dirname(app_config["config_path"]), exist_ok=True)
+                            
+                            # Load existing config or create new one
+                            app_data = {}
+                            if os.path.exists(app_config["config_path"]):
+                                with open(app_config["config_path"], 'r') as f:
+                                    app_data = json.load(f)
+                            
+                            # Initialize config key if it doesn't exist
+                            if app_config["config_key"] not in app_data:
+                                app_data[app_config["config_key"]] = {}
+                            
+                            # Get current config to preserve env vars
+                            current_config = app_data[app_config["config_key"]].get(server_name, {})
+                            env_vars = current_config.get("env", {})
+                            
+                            # Create new config with updated values but preserved env vars
+                            new_config = server_config.copy()
+                            if env_vars:
+                                new_config["env"] = env_vars
+                            
+                            # Update the config
+                            app_data[app_config["config_key"]][server_name] = new_config
+                            
+                            # Save the updated config
+                            with open(app_config["config_path"], 'w') as f:
+                                json.dump(app_data, f, indent=2)
+                            
+                            apps_with_changes.add(app_config["name"])
+                            
+                        except Exception as e:
+                            self.notification_manager.show_notification(
+                                self,
+                                f"Failed to update config for {app_config['name']}:\n{str(e)}",
+                                duration=5000
+                            )
+                            continue
+                    
+                    # Update the UI
+                    self.populate_server_grid()
+                    
+                    # Notify user about changes
+                    if apps_with_changes:
+                        apps_list = ", ".join(sorted(apps_with_changes))
+                        self.notification_manager.show_notification(
+                            self,
+                            f"Server configurations have been updated for: {apps_list}\n"
+                            f"Please restart these applications for the changes to take effect."
+                        )
+            
+            # Re-add the file to the watcher (some systems remove it after a change)
+            if os.path.exists(path):
+                self.file_watcher.addPath(path)
                 
         except Exception as e:
             self.notification_manager.show_notification(
                 self,
-                f"Error syncing configurations:\n{str(e)}",
+                f"Error processing config change for {os.path.basename(path)}:\n{str(e)}",
                 duration=5000
             )
     
